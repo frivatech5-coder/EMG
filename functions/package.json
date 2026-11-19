@@ -1,0 +1,22 @@
+{
+  "name": "emg-web-solutions-functions",
+  "description": "Firebase Cloud Functions for EMG Web Solutions (M-Pesa Daraja integration readiness and privileged server-side tasks).",
+  "scripts": {
+    "lint": "tsc --noEmit",
+    "build": "tsc",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "firebase-admin": "^13.0.1",
+    "firebase-functions": "^6.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  },
+  "private": true
+}

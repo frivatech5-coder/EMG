@@ -1,0 +1,315 @@
+{
+  "entities": {
+    "Admin": {
+      "title": "Admin",
+      "description": "Authorized EMG Web Solutions administrator profile.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "minLength": 3, "maxLength": 160 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "role": { "type": "string", "enum": ["super_admin", "admin"] },
+        "active": { "type": "boolean" },
+        "phone": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "role", "active", "createdAt", "updatedAt"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "A Kenyan business client managed by EMG Web Solutions.",
+      "type": "object",
+      "properties": {
+        "clientCode": { "type": "string", "minLength": 3, "maxLength": 32, "pattern": "^[A-Z0-9\\-]+$" },
+        "businessName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "contactName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "phone": { "type": "string", "minLength": 3, "maxLength": 40 },
+        "email": { "type": "string", "maxLength": 160 },
+        "category": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "location": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "domainName": { "type": "string", "maxLength": 160 },
+        "websiteUrl": { "type": "string", "maxLength": 300 },
+        "packageId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "monthlyAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["Prospect", "Demo Presented", "Active", "Inactive", "Cancelled"] },
+        "archived": { "type": "boolean" },
+        "registeredAt": { "type": "string", "format": "date" },
+        "sourceLeadId": { "type": "string", "maxLength": 128 },
+        "notes": { "type": "string", "maxLength": 4000 },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clientCode", "businessName", "contactName", "phone", "category", "location", "packageId", "monthlyAmount", "status", "archived", "registeredAt", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Website": {
+      "title": "Website",
+      "description": "A client website hosted or managed by EMG Web Solutions.",
+      "type": "object",
+      "properties": {
+        "websiteCode": { "type": "string", "minLength": 3, "maxLength": 32, "pattern": "^[A-Z0-9\\-]+$" },
+        "clientId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "businessName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "websiteName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "domain": { "type": "string", "maxLength": 160 },
+        "liveUrl": { "type": "string", "maxLength": 300 },
+        "hostingProvider": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "deploymentStatus": { "type": "string", "enum": ["In Development", "Preview", "Live", "Suspended", "Archived"] },
+        "renewalDate": { "type": "string", "maxLength": 32 },
+        "deploymentIntegrationStatus": { "type": "string", "enum": ["none", "healthy", "failed"] },
+        "deploymentErrorMessage": { "type": "string", "maxLength": 500 },
+        "technicalNotes": { "type": "string", "maxLength": 4000 },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["websiteCode", "clientId", "businessName", "websiteName", "hostingProvider", "deploymentStatus", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Subscription": {
+      "title": "Subscription",
+      "description": "Recurring website hosting and management subscription.",
+      "type": "object",
+      "properties": {
+        "subscriptionCode": { "type": "string", "minLength": 3, "maxLength": 32, "pattern": "^[A-Z0-9\\-]+$" },
+        "clientId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "packageName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "monthlyAmount": { "type": "number" },
+        "startDate": { "type": "string", "minLength": 8, "maxLength": 32 },
+        "nextPaymentDate": { "type": "string", "minLength": 8, "maxLength": 32 },
+        "lastPaymentDate": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "enum": ["Active", "Pending", "Overdue", "Suspended", "Cancelled"] },
+        "gracePeriodDays": { "type": "number" },
+        "gracePeriodEndDate": { "type": "string", "minLength": 8, "maxLength": 32 },
+        "cancelledAt": { "type": "string", "maxLength": 32 },
+        "notes": { "type": "string", "maxLength": 4000 },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["subscriptionCode", "clientId", "clientName", "packageName", "monthlyAmount", "startDate", "nextPaymentDate", "status", "gracePeriodDays", "gracePeriodEndDate", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Recorded client payment transaction (manual or future M-Pesa Daraja callback).",
+      "type": "object",
+      "properties": {
+        "paymentCode": { "type": "string", "minLength": 3, "maxLength": 32, "pattern": "^[A-Z0-9\\-]+$" },
+        "clientId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "subscriptionId": { "type": "string", "maxLength": 128 },
+        "invoiceId": { "type": "string", "maxLength": 128 },
+        "amount": { "type": "number" },
+        "method": { "type": "string", "enum": ["M-Pesa", "Bank", "PayPal", "Other"] },
+        "transactionReference": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "normalizedReference": { "type": "string", "minLength": 2, "maxLength": 120, "pattern": "^[A-Z0-9_\\-]+$" },
+        "paymentDate": { "type": "string", "minLength": 8, "maxLength": 32 },
+        "status": { "type": "string", "enum": ["Pending", "Paid", "Failed", "Refunded"] },
+        "verificationSource": { "type": "string", "enum": ["manual_admin", "mpesa_daraja_callback"] },
+        "notes": { "type": "string", "maxLength": 2000 },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["paymentCode", "clientId", "clientName", "amount", "method", "transactionReference", "normalizedReference", "paymentDate", "status", "verificationSource", "createdBy", "createdAt", "updatedAt"]
+    },
+    "PaymentReference": {
+      "title": "PaymentReference",
+      "description": "Uniqueness index document preventing duplicate transaction references.",
+      "type": "object",
+      "properties": {
+        "paymentId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "transactionReference": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["paymentId", "transactionReference", "createdBy", "createdAt"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Client billing invoice generated by EMG Web Solutions.",
+      "type": "object",
+      "properties": {
+        "invoiceNumber": { "type": "string", "minLength": 3, "maxLength": 40, "pattern": "^[A-Z0-9\\-]+$" },
+        "clientId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "clientEmail": { "type": "string", "maxLength": 160 },
+        "clientPhone": { "type": "string", "maxLength": 40 },
+        "clientLocation": { "type": "string", "maxLength": 120 },
+        "subscriptionId": { "type": "string", "maxLength": 128 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "amount": { "type": "number" },
+        "issueDate": { "type": "string", "minLength": 8, "maxLength": 32 },
+        "dueDate": { "type": "string", "minLength": 8, "maxLength": 32 },
+        "status": { "type": "string", "enum": ["Draft", "Unpaid", "Paid", "Overdue", "Cancelled"] },
+        "paymentInstructions": { "type": "string", "maxLength": 2000 },
+        "notes": { "type": "string", "maxLength": 2000 },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["invoiceNumber", "clientId", "clientName", "description", "amount", "issueDate", "dueDate", "status", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Lead": {
+      "title": "Lead",
+      "description": "Sales prospect tracked in the EMG Web Solutions CRM pipeline.",
+      "type": "object",
+      "properties": {
+        "leadCode": { "type": "string", "minLength": 3, "maxLength": 32, "pattern": "^[A-Z0-9\\-]+$" },
+        "businessName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "category": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "contactPerson": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "phone": { "type": "string", "minLength": 3, "maxLength": 40 },
+        "location": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "socialLink": { "type": "string", "maxLength": 300 },
+        "existingWebsite": { "type": "string", "maxLength": 300 },
+        "previewUrl": { "type": "string", "maxLength": 300 },
+        "contactChannel": { "type": "string", "enum": ["Facebook", "WhatsApp", "Phone Call", "Instagram", "Referral", "Walk-in", "Other"] },
+        "dateContacted": { "type": "string", "minLength": 8, "maxLength": 32 },
+        "interestLevel": { "type": "string", "enum": ["Low", "Medium", "High"] },
+        "estimatedBudget": { "type": "number" },
+        "followUpDate": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "enum": ["New Lead", "Contacted", "Interested", "Demo Prepared", "Demo Presented", "Negotiation", "Converted", "Lost"] },
+        "convertedClientId": { "type": "string", "maxLength": 128 },
+        "notes": { "type": "string", "maxLength": 4000 },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["leadCode", "businessName", "category", "contactPerson", "phone", "location", "contactChannel", "dateContacted", "interestLevel", "estimatedBudget", "status", "createdBy", "createdAt", "updatedAt"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Immutable administrative audit log entry.",
+      "type": "object",
+      "properties": {
+        "actionType": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "entityType": { "type": "string", "enum": ["client", "website", "subscription", "payment", "invoice", "lead", "notification", "settings", "admin"] },
+        "recordId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "adminId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "adminEmail": { "type": "string", "maxLength": 160 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["actionType", "entityType", "recordId", "summary", "adminId", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Smart business notification and reminder record with deterministic deduplication.",
+      "type": "object",
+      "properties": {
+        "dedupeKey": { "type": "string", "minLength": 3, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "eventType": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "category": { "type": "string", "enum": ["subscriptions", "payments", "leads", "websites"] },
+        "priority": { "type": "string", "enum": ["Critical", "Warning", "Info"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "read": { "type": "boolean" },
+        "readAt": { "type": "string", "maxLength": 64 },
+        "entityType": { "type": "string", "enum": ["client", "website", "subscription", "payment", "invoice", "lead", "system"] },
+        "recordId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "clientId": { "type": "string", "maxLength": 128 },
+        "clientName": { "type": "string", "maxLength": 160 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "amount": { "type": "number" },
+        "dueDate": { "type": "string", "maxLength": 32 },
+        "targetSection": { "type": "string", "enum": ["dashboard", "clients", "websites", "subscriptions", "payments", "invoices", "leads", "reminders", "reports", "activity", "settings"] },
+        "pushDispatched": { "type": "boolean" },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["dedupeKey", "eventType", "category", "priority", "title", "message", "read", "entityType", "recordId", "targetSection", "createdBy", "createdAt", "updatedAt"]
+    },
+    "FcmToken": {
+      "title": "FcmToken",
+      "description": "Registered Firebase Cloud Messaging Web Push device token linked to an authorized administrator.",
+      "type": "object",
+      "properties": {
+        "token": { "type": "string", "minLength": 20, "maxLength": 512 },
+        "adminUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "adminEmail": { "type": "string", "minLength": 3, "maxLength": 160 },
+        "deviceLabel": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "userAgent": { "type": "string", "maxLength": 400 },
+        "enabled": { "type": "boolean" },
+        "lastUsedAt": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["token", "adminUid", "adminEmail", "deviceLabel", "enabled", "createdAt", "updatedAt"]
+    },
+    "BusinessSettings": {
+      "title": "BusinessSettings",
+      "description": "Configurable business, billing, package, invoice, and smart notification preferences.",
+      "type": "object",
+      "properties": {
+        "businessName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "logoUrl": { "type": "string", "maxLength": 500 },
+        "businessEmail": { "type": "string", "maxLength": 160 },
+        "businessPhone": { "type": "string", "maxLength": 60 },
+        "businessAddress": { "type": "string", "maxLength": 300 },
+        "currency": { "type": "string", "minLength": 3, "maxLength": 8 },
+        "defaultGracePeriodDays": { "type": "number" },
+        "invoicePrefix": { "type": "string", "minLength": 1, "maxLength": 16 },
+        "nextInvoiceSequence": { "type": "number" },
+        "paymentInstructions": { "type": "string", "maxLength": 2000 },
+        "packages": { "type": "array" },
+        "notificationPreferences": { "type": "object" },
+        "updatedBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["businessName", "currency", "defaultGracePeriodDays", "invoicePrefix", "nextInvoiceSequence", "packages", "updatedBy", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Authorized EMG administrator accounts."
+    },
+    "/clients/{clientId}": {
+      "schema": { "$ref": "#/entities/Client" },
+      "description": "Business clients registered with EMG Web Solutions."
+    },
+    "/websites/{websiteId}": {
+      "schema": { "$ref": "#/entities/Website" },
+      "description": "Websites built and hosted for clients."
+    },
+    "/subscriptions/{subscriptionId}": {
+      "schema": { "$ref": "#/entities/Subscription" },
+      "description": "Monthly hosting and management subscriptions."
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/Payment" },
+      "description": "Recorded payment ledger."
+    },
+    "/payment_references/{refKey}": {
+      "schema": { "$ref": "#/entities/PaymentReference" },
+      "description": "Transaction reference uniqueness guard collection."
+    },
+    "/invoices/{invoiceId}": {
+      "schema": { "$ref": "#/entities/Invoice" },
+      "description": "Client invoices and billing statements."
+    },
+    "/leads/{leadId}": {
+      "schema": { "$ref": "#/entities/Lead" },
+      "description": "CRM sales prospects and outreach follow-ups."
+    },
+    "/activity_logs/{logId}": {
+      "schema": { "$ref": "#/entities/ActivityLog" },
+      "description": "Append-only audit trail of administrative actions."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "Smart notification and reminder alerts generated for EMG administrators."
+    },
+    "/fcm_tokens/{tokenId}": {
+      "schema": { "$ref": "#/entities/FcmToken" },
+      "description": "FCM Web Push device tokens registered by authorized administrators."
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/BusinessSettings" },
+      "description": "Global EMG Web Solutions configuration."
+    }
+  }
+}

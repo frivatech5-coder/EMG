@@ -1,0 +1,654 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ---------------------------------------------------------
+    // Global Security Primitives
+    // ---------------------------------------------------------
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser()
+        && ('email' in request.auth.token)
+        && request.auth.token.email is string
+        && request.auth.token.email.lower() == 'frivatech5@gmail.com';
+    }
+
+    function isStoredAdmin() {
+      return isVerifiedUser()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.active == true;
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || isStoredAdmin();
+    }
+
+    function isValidOptionalString(data, field, maxLen) {
+      return !(field in data) || (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function isValidRequiredString(data, field, minLen, maxLen) {
+      return (field in data) && data[field] is string && data[field].size() >= minLen && data[field].size() <= maxLen;
+    }
+
+    function hasValidTimestampsOnCreate(data) {
+      return data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    function hasValidTimestampsOnUpdate(data) {
+      return data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.createdAt == existing().createdAt
+        && data.updatedAt == request.time;
+    }
+
+    // ---------------------------------------------------------
+    // Entity Validation Blueprints
+    // ---------------------------------------------------------
+    function isValidAdmin(data, docId) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'active', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'active', 'phone', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.uid == docId
+        && isValidRequiredString(data, 'email', 3, 160)
+        && isValidRequiredString(data, 'displayName', 1, 120)
+        && data.role in ['super_admin', 'admin']
+        && data.active is bool
+        && isValidOptionalString(data, 'phone', 40)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidClient(data) {
+      return data.keys().hasAll([
+          'clientCode', 'businessName', 'contactName', 'phone', 'category',
+          'location', 'packageId', 'monthlyAmount', 'status', 'archived',
+          'registeredAt', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'clientCode', 'businessName', 'contactName', 'phone', 'email', 'category',
+          'location', 'domainName', 'websiteUrl', 'packageId', 'monthlyAmount',
+          'status', 'archived', 'registeredAt', 'sourceLeadId', 'notes',
+          'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidRequiredString(data, 'clientCode', 3, 32)
+        && data.clientCode.matches('^[A-Z0-9\\-]+$')
+        && isValidRequiredString(data, 'businessName', 1, 160)
+        && isValidRequiredString(data, 'contactName', 1, 120)
+        && isValidRequiredString(data, 'phone', 3, 40)
+        && isValidOptionalString(data, 'email', 160)
+        && isValidRequiredString(data, 'category', 1, 80)
+        && isValidRequiredString(data, 'location', 1, 120)
+        && isValidOptionalString(data, 'domainName', 160)
+        && isValidOptionalString(data, 'websiteUrl', 300)
+        && isValidRequiredString(data, 'packageId', 1, 64)
+        && data.monthlyAmount is number
+        && data.monthlyAmount >= 0
+        && data.monthlyAmount <= 10000000
+        && data.status in ['Prospect', 'Demo Presented', 'Active', 'Inactive', 'Cancelled']
+        && data.archived is bool
+        && isValidRequiredString(data, 'registeredAt', 8, 32)
+        && isValidOptionalString(data, 'sourceLeadId', 128)
+        && isValidOptionalString(data, 'notes', 4000)
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWebsite(data) {
+      return data.keys().hasAll([
+          'websiteCode', 'clientId', 'businessName', 'websiteName',
+          'hostingProvider', 'deploymentStatus', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'websiteCode', 'clientId', 'businessName', 'websiteName',
+          'domain', 'liveUrl', 'hostingProvider', 'deploymentStatus',
+          'renewalDate', 'deploymentIntegrationStatus', 'deploymentErrorMessage',
+          'technicalNotes', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidRequiredString(data, 'websiteCode', 3, 32)
+        && data.websiteCode.matches('^[A-Z0-9\\-]+$')
+        && isValidId(data.clientId)
+        && isValidRequiredString(data, 'businessName', 1, 160)
+        && isValidRequiredString(data, 'websiteName', 1, 160)
+        && isValidOptionalString(data, 'domain', 160)
+        && isValidOptionalString(data, 'liveUrl', 300)
+        && isValidRequiredString(data, 'hostingProvider', 1, 120)
+        && data.deploymentStatus in ['In Development', 'Preview', 'Live', 'Suspended', 'Archived']
+        && isValidOptionalString(data, 'renewalDate', 32)
+        && (!('deploymentIntegrationStatus' in data) || data.deploymentIntegrationStatus in ['none', 'healthy', 'failed'])
+        && isValidOptionalString(data, 'deploymentErrorMessage', 500)
+        && isValidOptionalString(data, 'technicalNotes', 4000)
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSubscription(data) {
+      return data.keys().hasAll([
+          'subscriptionCode', 'clientId', 'clientName', 'packageName',
+          'monthlyAmount', 'startDate', 'nextPaymentDate', 'status',
+          'gracePeriodDays', 'gracePeriodEndDate', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'subscriptionCode', 'clientId', 'clientName', 'packageName',
+          'monthlyAmount', 'startDate', 'nextPaymentDate', 'lastPaymentDate',
+          'status', 'gracePeriodDays', 'gracePeriodEndDate', 'cancelledAt',
+          'notes', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidRequiredString(data, 'subscriptionCode', 3, 32)
+        && data.subscriptionCode.matches('^[A-Z0-9\\-]+$')
+        && isValidId(data.clientId)
+        && isValidRequiredString(data, 'clientName', 1, 160)
+        && isValidRequiredString(data, 'packageName', 1, 80)
+        && data.monthlyAmount is number
+        && data.monthlyAmount >= 0
+        && data.monthlyAmount <= 10000000
+        && isValidRequiredString(data, 'startDate', 8, 32)
+        && isValidRequiredString(data, 'nextPaymentDate', 8, 32)
+        && isValidOptionalString(data, 'lastPaymentDate', 32)
+        && data.status in ['Active', 'Pending', 'Overdue', 'Suspended', 'Cancelled']
+        && data.gracePeriodDays is number
+        && data.gracePeriodDays >= 0
+        && data.gracePeriodDays <= 90
+        && isValidRequiredString(data, 'gracePeriodEndDate', 8, 32)
+        && isValidOptionalString(data, 'cancelledAt', 32)
+        && isValidOptionalString(data, 'notes', 4000)
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPayment(data) {
+      return data.keys().hasAll([
+          'paymentCode', 'clientId', 'clientName', 'amount', 'method',
+          'transactionReference', 'normalizedReference', 'paymentDate',
+          'status', 'verificationSource', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'paymentCode', 'clientId', 'clientName', 'subscriptionId', 'invoiceId',
+          'amount', 'method', 'transactionReference', 'normalizedReference',
+          'paymentDate', 'status', 'verificationSource', 'notes',
+          'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidRequiredString(data, 'paymentCode', 3, 32)
+        && data.paymentCode.matches('^[A-Z0-9\\-]+$')
+        && isValidId(data.clientId)
+        && isValidRequiredString(data, 'clientName', 1, 160)
+        && isValidOptionalString(data, 'subscriptionId', 128)
+        && isValidOptionalString(data, 'invoiceId', 128)
+        && data.amount is number
+        && data.amount > 0
+        && data.amount <= 10000000
+        && data.method in ['M-Pesa', 'Bank', 'PayPal', 'Other']
+        && isValidRequiredString(data, 'transactionReference', 2, 120)
+        && isValidRequiredString(data, 'normalizedReference', 2, 120)
+        && data.normalizedReference.matches('^[A-Z0-9_\\-]+$')
+        && isValidRequiredString(data, 'paymentDate', 8, 32)
+        && data.status in ['Pending', 'Paid', 'Failed', 'Refunded']
+        && data.verificationSource in ['manual_admin', 'mpesa_daraja_callback']
+        && isValidOptionalString(data, 'notes', 2000)
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPaymentReference(data) {
+      return data.keys().hasAll(['paymentId', 'transactionReference', 'createdBy', 'createdAt'])
+        && data.keys().hasOnly(['paymentId', 'transactionReference', 'createdBy', 'createdAt'])
+        && isValidId(data.paymentId)
+        && isValidRequiredString(data, 'transactionReference', 2, 120)
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidInvoice(data) {
+      return data.keys().hasAll([
+          'invoiceNumber', 'clientId', 'clientName', 'description',
+          'amount', 'issueDate', 'dueDate', 'status',
+          'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'invoiceNumber', 'clientId', 'clientName', 'clientEmail',
+          'clientPhone', 'clientLocation', 'subscriptionId', 'description',
+          'amount', 'issueDate', 'dueDate', 'status', 'paymentInstructions',
+          'notes', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidRequiredString(data, 'invoiceNumber', 3, 40)
+        && data.invoiceNumber.matches('^[A-Z0-9\\-]+$')
+        && isValidId(data.clientId)
+        && isValidRequiredString(data, 'clientName', 1, 160)
+        && isValidOptionalString(data, 'clientEmail', 160)
+        && isValidOptionalString(data, 'clientPhone', 40)
+        && isValidOptionalString(data, 'clientLocation', 120)
+        && isValidOptionalString(data, 'subscriptionId', 128)
+        && isValidRequiredString(data, 'description', 1, 1000)
+        && data.amount is number
+        && data.amount > 0
+        && data.amount <= 10000000
+        && isValidRequiredString(data, 'issueDate', 8, 32)
+        && isValidRequiredString(data, 'dueDate', 8, 32)
+        && data.status in ['Draft', 'Unpaid', 'Paid', 'Overdue', 'Cancelled']
+        && isValidOptionalString(data, 'paymentInstructions', 2000)
+        && isValidOptionalString(data, 'notes', 2000)
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidLead(data) {
+      return data.keys().hasAll([
+          'leadCode', 'businessName', 'category', 'contactPerson', 'phone',
+          'location', 'contactChannel', 'dateContacted', 'interestLevel',
+          'estimatedBudget', 'status', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'leadCode', 'businessName', 'category', 'contactPerson', 'phone',
+          'location', 'socialLink', 'existingWebsite', 'previewUrl',
+          'contactChannel', 'dateContacted', 'interestLevel', 'estimatedBudget',
+          'followUpDate', 'status', 'convertedClientId', 'notes',
+          'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidRequiredString(data, 'leadCode', 3, 32)
+        && data.leadCode.matches('^[A-Z0-9\\-]+$')
+        && isValidRequiredString(data, 'businessName', 1, 160)
+        && isValidRequiredString(data, 'category', 1, 80)
+        && isValidRequiredString(data, 'contactPerson', 1, 120)
+        && isValidRequiredString(data, 'phone', 3, 40)
+        && isValidRequiredString(data, 'location', 1, 120)
+        && isValidOptionalString(data, 'socialLink', 300)
+        && isValidOptionalString(data, 'existingWebsite', 300)
+        && isValidOptionalString(data, 'previewUrl', 300)
+        && data.contactChannel in ['Facebook', 'WhatsApp', 'Phone Call', 'Instagram', 'Referral', 'Walk-in', 'Other']
+        && isValidRequiredString(data, 'dateContacted', 8, 32)
+        && data.interestLevel in ['Low', 'Medium', 'High']
+        && data.estimatedBudget is number
+        && data.estimatedBudget >= 0
+        && data.estimatedBudget <= 10000000
+        && isValidOptionalString(data, 'followUpDate', 32)
+        && data.status in ['New Lead', 'Contacted', 'Interested', 'Demo Prepared', 'Demo Presented', 'Negotiation', 'Converted', 'Lost']
+        && isValidOptionalString(data, 'convertedClientId', 128)
+        && isValidOptionalString(data, 'notes', 4000)
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidActivityLog(data) {
+      return data.keys().hasAll(['actionType', 'entityType', 'recordId', 'summary', 'adminId', 'createdAt'])
+        && data.keys().hasOnly(['actionType', 'entityType', 'recordId', 'summary', 'adminId', 'adminEmail', 'createdAt'])
+        && isValidRequiredString(data, 'actionType', 2, 80)
+        && data.entityType in ['client', 'website', 'subscription', 'payment', 'invoice', 'lead', 'notification', 'settings', 'admin']
+        && isValidRequiredString(data, 'recordId', 1, 128)
+        && isValidRequiredString(data, 'summary', 1, 300)
+        && isValidId(data.adminId)
+        && data.adminId == request.auth.uid
+        && isValidOptionalString(data, 'adminEmail', 160)
+        && data.createdAt is timestamp
+        && data.createdAt == request.time;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll([
+          'dedupeKey', 'eventType', 'category', 'priority', 'title',
+          'message', 'read', 'entityType', 'recordId', 'targetSection',
+          'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'dedupeKey', 'eventType', 'category', 'priority', 'title',
+          'message', 'read', 'readAt', 'entityType', 'recordId',
+          'clientId', 'clientName', 'phone', 'amount', 'dueDate',
+          'targetSection', 'pushDispatched', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.dedupeKey)
+        && isValidRequiredString(data, 'eventType', 2, 80)
+        && data.category in ['subscriptions', 'payments', 'leads', 'websites']
+        && data.priority in ['Critical', 'Warning', 'Info']
+        && isValidRequiredString(data, 'title', 1, 200)
+        && isValidRequiredString(data, 'message', 1, 1000)
+        && data.read is bool
+        && isValidOptionalString(data, 'readAt', 64)
+        && data.entityType in ['client', 'website', 'subscription', 'payment', 'invoice', 'lead', 'system']
+        && isValidRequiredString(data, 'recordId', 1, 128)
+        && isValidOptionalString(data, 'clientId', 128)
+        && isValidOptionalString(data, 'clientName', 160)
+        && isValidOptionalString(data, 'phone', 40)
+        && (!('amount' in data) || (data.amount is number && data.amount >= 0 && data.amount <= 10000000))
+        && isValidOptionalString(data, 'dueDate', 32)
+        && data.targetSection in [
+          'dashboard', 'clients', 'websites', 'subscriptions', 'payments',
+          'invoices', 'leads', 'reminders', 'reports', 'activity', 'settings'
+        ]
+        && (!('pushDispatched' in data) || data.pushDispatched is bool)
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidFcmToken(data) {
+      return data.keys().hasAll(['token', 'adminUid', 'adminEmail', 'deviceLabel', 'enabled', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['token', 'adminUid', 'adminEmail', 'deviceLabel', 'userAgent', 'enabled', 'lastUsedAt', 'createdAt', 'updatedAt'])
+        && isValidRequiredString(data, 'token', 20, 512)
+        && isValidId(data.adminUid)
+        && isValidRequiredString(data, 'adminEmail', 3, 160)
+        && isValidRequiredString(data, 'deviceLabel', 1, 160)
+        && isValidOptionalString(data, 'userAgent', 400)
+        && data.enabled is bool
+        && isValidOptionalString(data, 'lastUsedAt', 64)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSettings(data) {
+      return data.keys().hasAll([
+          'businessName', 'currency', 'defaultGracePeriodDays',
+          'invoicePrefix', 'nextInvoiceSequence', 'packages',
+          'updatedBy', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'businessName', 'logoUrl', 'businessEmail', 'businessPhone',
+          'businessAddress', 'currency', 'defaultGracePeriodDays',
+          'invoicePrefix', 'nextInvoiceSequence', 'paymentInstructions',
+          'packages', 'notificationPreferences', 'updatedBy', 'updatedAt'
+        ])
+        && isValidRequiredString(data, 'businessName', 1, 160)
+        && isValidOptionalString(data, 'logoUrl', 500)
+        && isValidOptionalString(data, 'businessEmail', 160)
+        && isValidOptionalString(data, 'businessPhone', 60)
+        && isValidOptionalString(data, 'businessAddress', 300)
+        && isValidRequiredString(data, 'currency', 3, 8)
+        && data.defaultGracePeriodDays is number
+        && data.defaultGracePeriodDays >= 0
+        && data.defaultGracePeriodDays <= 90
+        && isValidRequiredString(data, 'invoicePrefix', 1, 16)
+        && data.nextInvoiceSequence is number
+        && data.nextInvoiceSequence >= 1
+        && data.nextInvoiceSequence <= 9999999
+        && isValidOptionalString(data, 'paymentInstructions', 2000)
+        && data.packages is list
+        && data.packages.size() >= 1
+        && data.packages.size() <= 20
+        && data.packages[0] is map
+        && (!('notificationPreferences' in data) || data.notificationPreferences is map)
+        && isValidId(data.updatedBy)
+        && data.updatedAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    // ---------------------------------------------------------
+    // Collection Match Rules
+    // ---------------------------------------------------------
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isAdmin() || (isVerifiedUser() && request.auth.uid == adminId));
+      allow list: if isAdmin();
+      allow create: if isValidId(adminId)
+        && isAdmin()
+        && isValidAdmin(incoming(), adminId)
+        && hasValidTimestampsOnCreate(incoming());
+      allow update: if isValidId(adminId)
+        && isAdmin()
+        && isValidAdmin(incoming(), adminId)
+        && hasValidTimestampsOnUpdate(incoming())
+        && incoming().uid == existing().uid
+        && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'role', 'active', 'phone', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    match /clients/{clientId} {
+      allow get: if isValidId(clientId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(clientId)
+        && isAdmin()
+        && isValidClient(incoming())
+        && incoming().createdBy == request.auth.uid
+        && hasValidTimestampsOnCreate(incoming());
+      allow update: if isValidId(clientId)
+        && isAdmin()
+        && isValidClient(incoming())
+        && incoming().createdBy == existing().createdBy
+        && incoming().clientCode == existing().clientCode
+        && hasValidTimestampsOnUpdate(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'businessName', 'contactName', 'phone', 'email', 'category',
+          'location', 'domainName', 'websiteUrl', 'packageId', 'monthlyAmount',
+          'status', 'archived', 'registeredAt', 'sourceLeadId', 'notes', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    match /websites/{websiteId} {
+      allow get: if isValidId(websiteId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(websiteId)
+        && isAdmin()
+        && isValidWebsite(incoming())
+        && incoming().createdBy == request.auth.uid
+        && hasValidTimestampsOnCreate(incoming())
+        && existsAfter(/databases/$(database)/documents/clients/$(incoming().clientId));
+      allow update: if isValidId(websiteId)
+        && isAdmin()
+        && isValidWebsite(incoming())
+        && incoming().createdBy == existing().createdBy
+        && incoming().websiteCode == existing().websiteCode
+        && hasValidTimestampsOnUpdate(incoming())
+        && existsAfter(/databases/$(database)/documents/clients/$(incoming().clientId))
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'clientId', 'businessName', 'websiteName', 'domain', 'liveUrl',
+          'hostingProvider', 'deploymentStatus', 'renewalDate',
+          'deploymentIntegrationStatus', 'deploymentErrorMessage',
+          'technicalNotes', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    match /subscriptions/{subscriptionId} {
+      allow get: if isValidId(subscriptionId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(subscriptionId)
+        && isAdmin()
+        && isValidSubscription(incoming())
+        && incoming().createdBy == request.auth.uid
+        && hasValidTimestampsOnCreate(incoming())
+        && existsAfter(/databases/$(database)/documents/clients/$(incoming().clientId));
+      allow update: if isValidId(subscriptionId)
+        && isAdmin()
+        && isValidSubscription(incoming())
+        && incoming().createdBy == existing().createdBy
+        && incoming().subscriptionCode == existing().subscriptionCode
+        && incoming().clientId == existing().clientId
+        && hasValidTimestampsOnUpdate(incoming())
+        && (existing().status != 'Cancelled' || isAdmin())
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'clientName', 'packageName', 'monthlyAmount', 'startDate',
+          'nextPaymentDate', 'lastPaymentDate', 'status', 'gracePeriodDays',
+          'gracePeriodEndDate', 'cancelledAt', 'notes', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    match /payments/{paymentId} {
+      allow get: if isValidId(paymentId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(paymentId)
+        && isAdmin()
+        && isValidPayment(incoming())
+        && incoming().createdBy == request.auth.uid
+        && hasValidTimestampsOnCreate(incoming())
+        && existsAfter(/databases/$(database)/documents/clients/$(incoming().clientId))
+        && existsAfter(/databases/$(database)/documents/payment_references/$(incoming().normalizedReference));
+      allow update: if isValidId(paymentId)
+        && isAdmin()
+        && isValidPayment(incoming())
+        && incoming().createdBy == existing().createdBy
+        && incoming().paymentCode == existing().paymentCode
+        && incoming().clientId == existing().clientId
+        && incoming().normalizedReference == existing().normalizedReference
+        && hasValidTimestampsOnUpdate(incoming())
+        && (existing().status != 'Refunded' || isAdmin())
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'status', 'notes', 'subscriptionId', 'invoiceId', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    match /payment_references/{refKey} {
+      allow get: if isValidId(refKey) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(refKey)
+        && isAdmin()
+        && isValidPaymentReference(incoming())
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && existsAfter(/databases/$(database)/documents/payments/$(incoming().paymentId));
+      allow update, delete: if false;
+    }
+
+    match /invoices/{invoiceId} {
+      allow get: if isValidId(invoiceId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(invoiceId)
+        && isAdmin()
+        && isValidInvoice(incoming())
+        && incoming().createdBy == request.auth.uid
+        && hasValidTimestampsOnCreate(incoming())
+        && existsAfter(/databases/$(database)/documents/clients/$(incoming().clientId));
+      allow update: if isValidId(invoiceId)
+        && isAdmin()
+        && isValidInvoice(incoming())
+        && incoming().createdBy == existing().createdBy
+        && incoming().invoiceNumber == existing().invoiceNumber
+        && incoming().clientId == existing().clientId
+        && hasValidTimestampsOnUpdate(incoming())
+        && (existing().status != 'Cancelled' || isAdmin())
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'clientName', 'clientEmail', 'clientPhone', 'clientLocation',
+          'subscriptionId', 'description', 'amount', 'issueDate', 'dueDate',
+          'status', 'paymentInstructions', 'notes', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    match /leads/{leadId} {
+      allow get: if isValidId(leadId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(leadId)
+        && isAdmin()
+        && isValidLead(incoming())
+        && incoming().createdBy == request.auth.uid
+        && hasValidTimestampsOnCreate(incoming());
+      allow update: if isValidId(leadId)
+        && isAdmin()
+        && isValidLead(incoming())
+        && incoming().createdBy == existing().createdBy
+        && incoming().leadCode == existing().leadCode
+        && hasValidTimestampsOnUpdate(incoming())
+        && (existing().status != 'Converted' || isAdmin())
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'businessName', 'category', 'contactPerson', 'phone', 'location',
+          'socialLink', 'existingWebsite', 'previewUrl', 'contactChannel',
+          'dateContacted', 'interestLevel', 'estimatedBudget', 'followUpDate',
+          'status', 'convertedClientId', 'notes', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    match /activity_logs/{logId} {
+      allow get: if isValidId(logId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(logId)
+        && isAdmin()
+        && isValidActivityLog(incoming());
+      allow update, delete: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow get: if isValidId(notificationId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(notificationId)
+        && isAdmin()
+        && isValidNotification(incoming())
+        && incoming().createdBy == request.auth.uid
+        && hasValidTimestampsOnCreate(incoming());
+      allow update: if isValidId(notificationId)
+        && isAdmin()
+        && isValidNotification(incoming())
+        && incoming().dedupeKey == existing().dedupeKey
+        && incoming().createdBy == existing().createdBy
+        && hasValidTimestampsOnUpdate(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'read', 'readAt', 'priority', 'title', 'message', 'amount', 'dueDate', 'pushDispatched', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    match /fcm_tokens/{tokenId} {
+      allow get: if isValidId(tokenId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(tokenId)
+        && isAdmin()
+        && isValidFcmToken(incoming())
+        && incoming().adminUid == request.auth.uid
+        && hasValidTimestampsOnCreate(incoming());
+      allow update: if isValidId(tokenId)
+        && isAdmin()
+        && isValidFcmToken(incoming())
+        && incoming().adminUid == existing().adminUid
+        && incoming().token == existing().token
+        && hasValidTimestampsOnUpdate(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'enabled', 'deviceLabel', 'userAgent', 'lastUsedAt', 'updatedAt'
+        ]);
+      allow delete: if isValidId(tokenId)
+        && isAdmin()
+        && existing().adminUid == request.auth.uid;
+    }
+
+    match /settings/{settingId} {
+      allow get: if isValidId(settingId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(settingId)
+        && isAdmin()
+        && isValidSettings(incoming())
+        && incoming().updatedBy == request.auth.uid;
+      allow update: if isValidId(settingId)
+        && isAdmin()
+        && isValidSettings(incoming())
+        && incoming().updatedBy == request.auth.uid
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'businessName', 'logoUrl', 'businessEmail', 'businessPhone',
+          'businessAddress', 'currency', 'defaultGracePeriodDays',
+          'invoicePrefix', 'nextInvoiceSequence', 'paymentInstructions',
+          'packages', 'notificationPreferences', 'updatedBy', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+  }
+}

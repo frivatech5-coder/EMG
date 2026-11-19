@@ -1,0 +1,6 @@
+{
+  "name": "EMG Web Solutions — Business Management System",
+  "description": "Operations, client, website, subscription, M-Pesa/manual payment, invoicing, and CRM management system for EMG Web Solutions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
