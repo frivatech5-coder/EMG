@@ -89,17 +89,13 @@ export function LoginPage() {
   return (
     <div className="min-h-screen bg-[#09090B] text-slate-100 flex flex-col justify-center px-4 py-10">
       <div className="max-w-md w-full mx-auto space-y-6">
-        <div className="text-center space-y-2">
-          <div className="w-12 h-12 mx-auto rounded-xl bg-blue-600/15 border border-blue-500/30 flex items-center justify-center">
-            <svg
-              viewBox="0 0 24 24"
-              className="w-6 h-6 text-blue-400"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-            >
-              <path d="M4 7h10M4 12h7M4 17h10M17 7l3 5-3 5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+        <div className="text-center space-y-3">
+          <div className="inline-flex items-center justify-center bg-white rounded-2xl px-4 py-2.5 shadow-lg border border-white/15 mx-auto">
+            <img
+              src="/assets/aistudio/emglogo0_fdf409c7.png"
+              alt="EMG WEB SOLUTIONS — Design, Develop, Grow"
+              className="h-20 sm:h-24 w-auto object-contain"
+            />
           </div>
           <h1 className="font-display text-2xl font-bold text-white tracking-tight">
             EMG WEB SOLUTIONS

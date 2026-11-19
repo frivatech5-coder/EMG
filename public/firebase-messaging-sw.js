@@ -42,6 +42,8 @@ importScripts('https://www.gstatic.com/firebasejs/13.4.0/firebase-messaging-comp
 
         return self.registration.showNotification(title, {
           body,
+          icon: '/pwa-192x192.png',
+          badge: '/pwa-192x192.png',
           tag: dedupeKey,
           renotify: false,
           requireInteraction: priority === 'Critical',

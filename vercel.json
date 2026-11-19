@@ -25,7 +25,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!firebase-messaging-sw\\.js|sw\\.js|workbox-.*\\.js|manifest\\.webmanifest|offline\\.html|icon\\.svg|pwa-.*\\.png|apple-touch-icon\\.png).*)",
+      "source": "/((?!firebase-messaging-sw\\.js|sw\\.js|workbox-.*\\.js|manifest\\.webmanifest|offline\\.html|icon\\.svg|pwa-.*\\.png|apple-touch-icon\\.png|assets/.*).*)",
       "destination": "/index.html"
     }
   ]

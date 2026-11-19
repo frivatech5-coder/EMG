@@ -85,30 +85,14 @@ export function Sidebar({
       {/* Brand header */}
       <div className="px-5 h-16 flex items-center justify-between border-b border-white/[0.08] shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          {settings.logoUrl ? (
+          <div className="bg-white rounded-lg p-1 border border-white/15 shrink-0 flex items-center justify-center">
             <img
-              src={settings.logoUrl}
-              alt={settings.businessName}
+              src={settings.logoUrl || '/assets/aistudio/emglogo0_fdf409c7.png'}
+              alt={settings.businessName || 'EMG WEB SOLUTIONS'}
               referrerPolicy="no-referrer"
-              className="w-8 h-8 rounded-lg object-cover border border-white/10 shrink-0"
+              className="h-8 w-12 object-contain"
             />
-          ) : (
-            <div className="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center shrink-0">
-              <svg
-                viewBox="0 0 24 24"
-                className="w-4 h-4 text-blue-400"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-              >
-                <path
-                  d="M4 7h10M4 12h7M4 17h10M17 7l3 5-3 5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
-          )}
+          </div>
           <div className="min-w-0">
             <span className="block font-display font-bold text-sm tracking-tight text-white truncate">
               {settings.businessName || 'EMG WEB SOLUTIONS'}

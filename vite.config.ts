@@ -16,6 +16,7 @@ export default defineConfig(() => {
       VitePWA({
         registerType: 'prompt',
         includeAssets: [
+          'assets/aistudio/emglogo0_fdf409c7.png',
           'icon.svg',
           'apple-touch-icon.png',
           'pwa-192x192.png',

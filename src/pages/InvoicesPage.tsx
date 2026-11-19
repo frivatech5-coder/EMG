@@ -654,14 +654,12 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6 pb-6 border-b border-slate-200">
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-3">
-                    {settings.logoUrl && (
-                      <img
-                        src={settings.logoUrl}
-                        alt={settings.businessName}
-                        referrerPolicy="no-referrer"
-                        className="w-10 h-10 object-contain rounded"
-                      />
-                    )}
+                    <img
+                      src={settings.logoUrl || '/assets/aistudio/emglogo0_fdf409c7.png'}
+                      alt={settings.businessName || 'EMG WEB SOLUTIONS'}
+                      referrerPolicy="no-referrer"
+                      className="h-12 w-auto object-contain rounded"
+                    />
                     <h2 className="text-2xl font-bold tracking-tight text-slate-900">
                       {settings.businessName || 'EMG WEB SOLUTIONS'}
                     </h2>
