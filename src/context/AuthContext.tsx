@@ -9,7 +9,7 @@ import {
   signOut,
   type User,
 } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { auth, BOOTSTRAP_ADMIN_EMAIL } from '../lib/firebase';
 import { verifyAdminAccess } from '../services/emgFirestore';
 import type { AdminUser } from '../types/domain';
 
@@ -17,6 +17,7 @@ interface AuthContextValue {
   user: User | null;
   adminProfile: AdminUser | null;
   isAuthorizedAdmin: boolean;
+  isSuperAdmin: boolean;
   authReady: boolean;
   authError: string | null;
   clearAuthError: () => void;
@@ -143,12 +144,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signOut(auth);
   };
 
+  const isSuperAdmin =
+    isAuthorizedAdmin &&
+    (adminProfile?.role === 'super_admin' ||
+      (user?.email || '').toLowerCase() === BOOTSTRAP_ADMIN_EMAIL.toLowerCase());
+
   return (
     <AuthContext.Provider
       value={{
         user,
         adminProfile,
         isAuthorizedAdmin,
+        isSuperAdmin,
         authReady,
         authError,
         clearAuthError: () => setAuthError(null),

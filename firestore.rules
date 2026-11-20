@@ -48,6 +48,12 @@ service cloud.firestore {
       return isBootstrappedAdmin() || isStoredAdmin();
     }
 
+    function isSuperAdmin() {
+      return isBootstrappedAdmin()
+        || (isStoredAdmin()
+          && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'super_admin');
+    }
+
     function isValidOptionalString(data, field, maxLen) {
       return !(field in data) || (data[field] is string && data[field].size() <= maxLen);
     }
@@ -441,7 +447,7 @@ service cloud.firestore {
           'location', 'domainName', 'websiteUrl', 'packageId', 'monthlyAmount',
           'status', 'archived', 'registeredAt', 'sourceLeadId', 'notes', 'updatedAt'
         ]);
-      allow delete: if false;
+      allow delete: if isValidId(clientId) && isSuperAdmin();
     }
 
     match /websites/{websiteId} {
@@ -466,7 +472,7 @@ service cloud.firestore {
           'deploymentIntegrationStatus', 'deploymentErrorMessage',
           'technicalNotes', 'updatedAt'
         ]);
-      allow delete: if false;
+      allow delete: if isValidId(websiteId) && isSuperAdmin();
     }
 
     match /subscriptions/{subscriptionId} {
@@ -491,7 +497,7 @@ service cloud.firestore {
           'nextPaymentDate', 'lastPaymentDate', 'status', 'gracePeriodDays',
           'gracePeriodEndDate', 'cancelledAt', 'notes', 'updatedAt'
         ]);
-      allow delete: if false;
+      allow delete: if isValidId(subscriptionId) && isSuperAdmin();
     }
 
     match /payments/{paymentId} {
@@ -516,7 +522,7 @@ service cloud.firestore {
         && incoming().diff(existing()).affectedKeys().hasOnly([
           'status', 'notes', 'subscriptionId', 'invoiceId', 'updatedAt'
         ]);
-      allow delete: if false;
+      allow delete: if isValidId(paymentId) && isSuperAdmin();
     }
 
     match /payment_references/{refKey} {
@@ -528,7 +534,8 @@ service cloud.firestore {
         && incoming().createdBy == request.auth.uid
         && incoming().createdAt == request.time
         && existsAfter(/databases/$(database)/documents/payments/$(incoming().paymentId));
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if isValidId(refKey) && isSuperAdmin();
     }
 
     match /invoices/{invoiceId} {
@@ -553,7 +560,7 @@ service cloud.firestore {
           'subscriptionId', 'description', 'amount', 'issueDate', 'dueDate',
           'status', 'paymentInstructions', 'notes', 'updatedAt'
         ]);
-      allow delete: if false;
+      allow delete: if isValidId(invoiceId) && isSuperAdmin();
     }
 
     match /leads/{leadId} {
@@ -577,7 +584,7 @@ service cloud.firestore {
           'dateContacted', 'interestLevel', 'estimatedBudget', 'followUpDate',
           'status', 'convertedClientId', 'notes', 'updatedAt'
         ]);
-      allow delete: if false;
+      allow delete: if isValidId(leadId) && isSuperAdmin();
     }
 
     match /activity_logs/{logId} {
@@ -586,7 +593,8 @@ service cloud.firestore {
       allow create: if isValidId(logId)
         && isAdmin()
         && isValidActivityLog(incoming());
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if isValidId(logId) && isSuperAdmin();
     }
 
     match /notifications/{notificationId} {
@@ -606,7 +614,7 @@ service cloud.firestore {
         && incoming().diff(existing()).affectedKeys().hasOnly([
           'read', 'readAt', 'priority', 'title', 'message', 'amount', 'dueDate', 'pushDispatched', 'updatedAt'
         ]);
-      allow delete: if false;
+      allow delete: if isValidId(notificationId) && isSuperAdmin();
     }
 
     match /fcm_tokens/{tokenId} {

@@ -14,12 +14,16 @@ import {
   CalendarClock,
   User,
   Settings,
+  Trash2,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/ToastContext';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { ErrorState, TableSkeleton } from '../components/ui/EmptyState';
 import { PaginationBar, useTablePagination } from '../components/ui/DataTableControls';
 import { PageHeader, SegmentedTabs } from '../components/ui/PageHeader';
+import { permanentlyDeleteNotification } from '../services/emgFirestore';
 import {
   markAllNotificationsRead,
   markNotificationRead,
@@ -78,6 +82,7 @@ export function RemindersPage({ onNavigate }: RemindersPageProps) {
     runNotificationSync,
   } = useData();
   const { showToast } = useToast();
+  const { isSuperAdmin } = useAuth();
 
   const [activeFilter, setActiveFilter] = useState<NotificationFilter>('ALL');
   const [historyMode, setHistoryMode] = useState<'active' | 'history'>('active');
@@ -86,6 +91,8 @@ export function RemindersPage({ onNavigate }: RemindersPageProps) {
   const [syncing, setSyncing] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
   const [enablingPush, setEnablingPush] = useState(false);
+  const [deletingNotification, setDeletingNotification] = useState<NotificationItem | null>(null);
+  const [deletingBusy, setDeletingBusy] = useState(false);
 
   const currency = settings.currency || 'KES';
   const permission = getBrowserNotificationPermission();
@@ -199,6 +206,23 @@ export function RemindersPage({ onNavigate }: RemindersPageProps) {
       await markNotificationRead(id);
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to update notification.', 'error');
+    }
+  };
+
+  const handlePermanentDeleteNotification = async () => {
+    if (!deletingNotification) return;
+    setDeletingBusy(true);
+    try {
+      await permanentlyDeleteNotification(deletingNotification.id);
+      showToast('Permanently deleted notification.', 'success');
+      if (selectedId === deletingNotification.id) {
+        setSelectedId(null);
+      }
+      setDeletingNotification(null);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to delete notification.', 'error');
+    } finally {
+      setDeletingBusy(false);
     }
   };
 
@@ -502,6 +526,16 @@ export function RemindersPage({ onNavigate }: RemindersPageProps) {
                         Open Record
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
+                      {isSuperAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => setDeletingNotification(item)}
+                          aria-label={`Delete notification ${item.title}`}
+                          className="p-1.5 text-red-400 bg-red-500/10 hover:bg-red-500/20 rounded-md transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -619,11 +653,40 @@ export function RemindersPage({ onNavigate }: RemindersPageProps) {
                     Mark Read
                   </button>
                 )}
+
+                {isSuperAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setDeletingNotification(selectedItem)}
+                    title="Permanently Delete Notification"
+                    aria-label={`Delete notification ${selectedItem.title}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[38px] text-xs font-medium text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-colors ml-auto"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete
+                  </button>
+                )}
               </div>
             </div>
           )}
         </div>
       )}
+
+      <ConfirmModal
+        open={Boolean(deletingNotification)}
+        title="Permanently Delete Notification"
+        description={
+          deletingNotification
+            ? `Permanently delete alert "${deletingNotification.title}"? Note: if the underlying overdue client/subscription record still exists, automated alert checks may regenerate active deadline alerts.`
+            : ''
+        }
+        confirmLabel="Permanently Delete"
+        tone="danger"
+        requireConfirmText="DELETE"
+        busy={deletingBusy}
+        onConfirm={handlePermanentDeleteNotification}
+        onCancel={() => setDeletingNotification(null)}
+      />
     </div>
   );
 }

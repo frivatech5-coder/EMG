@@ -12,8 +12,10 @@ import {
   Server,
   AlertCircle,
   CheckCircle2,
+  Trash2,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/ToastContext';
 import { SlideOverModal } from '../components/ui/SlideOverModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
@@ -28,6 +30,7 @@ import {
 } from '../components/ui/DataTableControls';
 import {
   createWebsite,
+  permanentlyDeleteWebsite,
   updateWebsite,
   type WebsiteInput,
 } from '../services/emgFirestore';
@@ -52,6 +55,7 @@ type WebsiteSortKey = 'websiteName' | 'businessName' | 'renewalDate' | 'deployme
 export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: WebsitesPageProps) {
   const { websites, clients, activityLogs, loading, syncError, retrySync } = useData();
   const { showToast } = useToast();
+  const { isSuperAdmin } = useAuth();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -60,6 +64,7 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
   const [formOpen, setFormOpen] = useState(false);
   const [editingWebsite, setEditingWebsite] = useState<Website | null>(null);
   const [historyWebsite, setHistoryWebsite] = useState<Website | null>(null);
+  const [deletingWebsite, setDeletingWebsite] = useState<Website | null>(null);
   const [pendingSuspend, setPendingSuspend] = useState<{
     website: Website;
     payload: WebsiteInput;
@@ -236,6 +241,23 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
     }
 
     await commitWebsiteSave(formState);
+  };
+
+  const handlePermanentDeleteWebsite = async () => {
+    if (!deletingWebsite) return;
+    setSubmitting(true);
+    try {
+      await permanentlyDeleteWebsite(deletingWebsite);
+      showToast(`Permanently deleted website ${deletingWebsite.websiteName}.`, 'success');
+      if (historyWebsite?.id === deletingWebsite.id) {
+        setHistoryWebsite(null);
+      }
+      setDeletingWebsite(null);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to delete website.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const siteLogs = useMemo(() => {
@@ -463,6 +485,17 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
                       <Pencil className="w-3.5 h-3.5" />
                       Edit
                     </button>
+                    {isSuperAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setDeletingWebsite(site)}
+                        title="Permanently Delete Website"
+                        aria-label={`Permanently delete ${site.websiteName}`}
+                        className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -549,6 +582,17 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
+                        {isSuperAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => setDeletingWebsite(site)}
+                            title="Permanently Delete Website"
+                            aria-label={`Permanently delete ${site.websiteName}`}
+                            className="p-2 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -834,6 +878,22 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
           pendingSuspend ? commitWebsiteSave(pendingSuspend.payload) : undefined
         }
         onCancel={() => setPendingSuspend(null)}
+      />
+
+      <ConfirmModal
+        open={Boolean(deletingWebsite)}
+        title="Permanently Delete Website"
+        description={
+          deletingWebsite
+            ? `Permanently delete ${deletingWebsite.websiteName} (${deletingWebsite.websiteCode}) and its linked alerts? This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Permanently Delete"
+        tone="danger"
+        requireConfirmText="DELETE"
+        busy={submitting}
+        onConfirm={handlePermanentDeleteWebsite}
+        onCancel={() => setDeletingWebsite(null)}
       />
     </div>
   );

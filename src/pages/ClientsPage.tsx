@@ -8,8 +8,10 @@ import {
   Eye,
   Users,
   RotateCcw,
+  Trash2,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/ToastContext';
 import { SlideOverModal } from '../components/ui/SlideOverModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
@@ -30,6 +32,7 @@ import {
 import {
   archiveClient,
   createClient,
+  permanentlyDeleteClientCascade,
   updateClient,
   type ClientInput,
 } from '../services/emgFirestore';
@@ -63,6 +66,7 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
     retrySync,
   } = useData();
   const { showToast } = useToast();
+  const { isSuperAdmin } = useAuth();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -75,6 +79,7 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [viewingClient, setViewingClient] = useState<Client | null>(null);
   const [archivingClient, setArchivingClient] = useState<Client | null>(null);
+  const [deletingClient, setDeletingClient] = useState<Client | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -268,6 +273,29 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
     }
   };
 
+  const handlePermanentDeleteClient = async () => {
+    if (!deletingClient) return;
+    setSubmitting(true);
+    try {
+      const { deletedCount } = await permanentlyDeleteClientCascade(deletingClient, {
+        deleteRelatedLogs: true,
+        deleteSourceLead: true,
+      });
+      showToast(
+        `Permanently deleted ${deletingClient.businessName} and ${Math.max(0, deletedCount - 1)} linked record${deletedCount - 1 === 1 ? '' : 's'}.`,
+        'success'
+      );
+      if (viewingClient?.id === deletingClient.id) {
+        setViewingClient(null);
+      }
+      setDeletingClient(null);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to permanently delete client.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const currency = settings.currency || 'KES';
 
   const profileWebsites = useMemo(
@@ -429,7 +457,7 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                       <p className="text-zinc-400 truncate">{client.location}</p>
                     </div>
                   </div>
-                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.06]">
+                  <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-white/[0.06]">
                     <button
                       type="button"
                       onClick={() => setViewingClient(client)}
@@ -459,6 +487,17 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                         className="px-3 py-2 text-xs font-medium text-amber-300 bg-amber-500/10 rounded-lg min-h-[38px]"
                       >
                         Archive
+                      </button>
+                    )}
+                    {isSuperAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setDeletingClient(client)}
+                        aria-label={`Permanently delete ${client.businessName}`}
+                        className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium text-red-400 bg-red-500/10 hover:bg-red-500/20 rounded-lg min-h-[38px]"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete
                       </button>
                     )}
                   </div>
@@ -580,6 +619,17 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                               className="p-2 text-zinc-400 hover:text-amber-400 hover:bg-white/[0.06] rounded-md transition-colors"
                             >
                               <Archive className="w-4 h-4" />
+                            </button>
+                          )}
+                          {isSuperAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => setDeletingClient(client)}
+                              title="Permanently Delete Client & Linked Records"
+                              aria-label={`Permanently delete ${client.businessName}`}
+                              className="p-2 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           )}
                         </div>
@@ -893,6 +943,16 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                     <Pencil className="w-3.5 h-3.5" />
                     Edit Client
                   </button>
+                  {isSuperAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setDeletingClient(viewingClient)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-400 bg-red-500/10 hover:bg-red-500/20 rounded-md"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Delete
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1061,6 +1121,22 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
         busy={submitting}
         onConfirm={handleArchiveConfirm}
         onCancel={() => setArchivingClient(null)}
+      />
+
+      <ConfirmModal
+        open={Boolean(deletingClient)}
+        title="Permanently Delete Client"
+        description={
+          deletingClient
+            ? `This will permanently erase ${deletingClient.businessName} (${deletingClient.clientCode}) along with all linked websites, subscriptions, invoices, payments, payment references, notifications, source lead, and activity logs. This action cannot be undone.`
+            : ''
+        }
+        confirmLabel="Permanently Delete"
+        tone="danger"
+        requireConfirmText="DELETE"
+        busy={submitting}
+        onConfirm={handlePermanentDeleteClient}
+        onCancel={() => setDeletingClient(null)}
       />
     </div>
   );

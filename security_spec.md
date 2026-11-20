@@ -10,8 +10,8 @@
    - Creating a `payment` requires atomically writing `/payment_references/{normalizedReference}` (which cannot be overwritten).
    - Smart notifications use deterministic `dedupeKey` document IDs under `/notifications/{notificationId}` (`category`, `priority`, `entityType`, `read`, `pushDispatched`).
 5. **Financial, Audit & Push Token Integrity**:
-   - `activity_logs` are strictly append-only (no `update` or `delete`).
-   - Historical `payments` cannot be deleted (refunds/corrections must update `status` to `'Refunded'` or `'Failed'`).
+   - `activity_logs` never allow `update`; only verified `super_admin` users may permanently purge test records and related logs.
+   - Standard `admin` users cannot permanently delete financial history or audit logs; only verified `super_admin` accounts may perform confirmed permanent deletes/test-data purges.
    - Archiving a `client` (`archived: true`) preserves all linked `subscriptions`, `payments`, `invoices`, and `websites`.
    - `fcm_tokens` are strictly admin-bound (`adminUid == request.auth.uid`) with validated token length and device metadata.
 6. **Temporal & Authorship Integrity**: All `createdAt` and `updatedAt` fields must equal `request.time`; `createdBy` / `adminId` / `adminUid` must equal `request.auth.uid`; `createdAt` and `createdBy` are immutable on update.
@@ -27,6 +27,6 @@
 7. **Orphaned Website Creation**: Admin attempts to create a `website` with non-existent `clientId: 'missing-client-999'`.
 8. **Client-Spoofed Timestamp**: Admin attempts to create a `payment` with `createdAt: new Date('2020-01-01')` instead of `serverTimestamp()`.
 9. **Identity Spoofing on Audit Log**: Admin attempts to create an `activity_logs` entry with `adminId: 'another-uid'`.
-10. **Audit Log Tampering**: Admin attempts to `updateDoc` or `deleteDoc` on `/activity_logs/log1`.
-11. **Financial History Deletion**: Admin attempts to `deleteDoc` on `/payments/pay1`.
+10. **Audit Log Tampering**: Non-super-admin attempts to `updateDoc` or `deleteDoc` on `/activity_logs/log1`.
+11. **Standard Admin Financial Deletion**: Standard `admin` (non-`super_admin`) attempts to `deleteDoc` on `/payments/pay1`.
 12. **Unbounded String / Payload Exhaustion**: Admin attempts to write a `notes` string exceeding 4,000 characters or a `packages` array exceeding 20 entries.

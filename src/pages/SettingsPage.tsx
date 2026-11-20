@@ -13,11 +13,19 @@ import {
   AlertCircle,
   Building2,
   Layers,
+  Search,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/ToastContext';
-import { saveAdminProfile, saveBusinessSettings } from '../services/emgFirestore';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
+import {
+  executePurgeMatch,
+  findMatchingRecordsForPurge,
+  saveAdminProfile,
+  saveBusinessSettings,
+  type PurgeScanResult,
+} from '../services/emgFirestore';
 import {
   deleteFcmToken,
   resolveNotificationPreferences,
@@ -41,9 +49,9 @@ import {
 import { TableSkeleton } from '../components/ui/EmptyState';
 import { INPUT_CLASS, PageHeader, SegmentedTabs } from '../components/ui/PageHeader';
 
-type SettingsTab = 'general' | 'packages' | 'notifications' | 'webpush' | 'admins';
+type SettingsTab = 'general' | 'packages' | 'notifications' | 'webpush' | 'admins' | 'cleanup';
 
-const SETTINGS_TABS: Array<{ id: SettingsTab; label: string; icon: typeof Building2 }> = [
+const BASE_SETTINGS_TABS: Array<{ id: SettingsTab; label: string; icon: typeof Building2 }> = [
   { id: 'general', label: 'Company & Invoicing', icon: Building2 },
   { id: 'packages', label: 'Packages', icon: Layers },
   { id: 'notifications', label: 'Notification Rules', icon: BellRing },
@@ -53,8 +61,12 @@ const SETTINGS_TABS: Array<{ id: SettingsTab; label: string; icon: typeof Buildi
 
 export function SettingsPage() {
   const { settings, admins, fcmTokens, loading } = useData();
-  const { user, adminProfile } = useAuth();
+  const { user, adminProfile, isSuperAdmin } = useAuth();
   const { showToast } = useToast();
+
+  const settingsTabs = isSuperAdmin
+    ? [...BASE_SETTINGS_TABS, { id: 'cleanup' as const, label: 'Data Cleanup', icon: Trash2 }]
+    : BASE_SETTINGS_TABS;
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
 
@@ -96,6 +108,13 @@ export function SettingsPage() {
   const [newAdminName, setNewAdminName] = useState('');
   const [newAdminRole, setNewAdminRole] = useState<AdminRole>('admin');
   const [addingAdmin, setAddingAdmin] = useState(false);
+
+  // Super Admin Data Cleanup / Purge by Keyword
+  const [purgeKeyword, setPurgeKeyword] = useState('');
+  const [scanningPurge, setScanningPurge] = useState(false);
+  const [executingPurge, setExecutingPurge] = useState(false);
+  const [purgeScan, setPurgeScan] = useState<PurgeScanResult | null>(null);
+  const [confirmPurgeOpen, setConfirmPurgeOpen] = useState(false);
 
   useEffect(() => {
     setBusinessName(settings.businessName);
@@ -334,6 +353,51 @@ export function SettingsPage() {
     }
   };
 
+  const handleScanPurge = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const term = purgeKeyword.trim();
+    if (term.length < 2) {
+      showToast('Enter at least 2 characters to scan Firestore records.', 'error');
+      return;
+    }
+    setScanningPurge(true);
+    try {
+      const result = await findMatchingRecordsForPurge(term);
+      setPurgeScan(result);
+      if (result.totalMatched === 0) {
+        showToast(`No records matched "${result.keyword}" across any collection.`, 'info');
+      } else {
+        showToast(
+          `Found ${result.totalMatched} matching Firestore document${result.totalMatched === 1 ? '' : 's'} for "${result.keyword}".`,
+          'success'
+        );
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to scan records.', 'error');
+    } finally {
+      setScanningPurge(false);
+    }
+  };
+
+  const handleExecutePurge = async () => {
+    if (!purgeScan || purgeScan.totalMatched === 0) return;
+    setExecutingPurge(true);
+    try {
+      const deletedCount = await executePurgeMatch(purgeScan);
+      showToast(
+        `Permanently purged ${deletedCount} document${deletedCount === 1 ? '' : 's'} matching "${purgeScan.keyword}".`,
+        'success'
+      );
+      setConfirmPurgeOpen(false);
+      setPurgeScan(null);
+      setPurgeKeyword('');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to purge records.', 'error');
+    } finally {
+      setExecutingPurge(false);
+    }
+  };
+
   const resolvedVapid = (notifPrefs.vapidPublicKey || ENV_VAPID_KEY || '').trim();
   const activeLogoPreview = logoUrl.trim() || '/assets/aistudio/emglogo0_fdf409c7.png';
 
@@ -371,7 +435,7 @@ export function SettingsPage() {
         <SegmentedTabs
           value={activeTab}
           onChange={setActiveTab}
-          options={SETTINGS_TABS.map((t) => ({ id: t.id, label: t.label }))}
+          options={settingsTabs.map((t) => ({ id: t.id, label: t.label }))}
         />
       </div>
 
@@ -382,9 +446,10 @@ export function SettingsPage() {
             aria-label="Settings sections"
             className="bg-[#111216] border border-white/[0.08] rounded-xl p-1.5 space-y-0.5"
           >
-            {SETTINGS_TABS.map((tab) => {
+            {settingsTabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
+              const isCleanup = tab.id === 'cleanup';
               return (
                 <button
                   key={tab.id}
@@ -393,13 +458,29 @@ export function SettingsPage() {
                   className={`relative w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-medium transition-colors text-left ${
                     isActive
                       ? 'bg-white/[0.08] text-white'
+                      : isCleanup
+                      ? 'text-red-400/80 hover:text-red-300 hover:bg-red-500/[0.06]'
                       : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.03]'
                   }`}
                 >
                   {isActive && (
-                    <span className="absolute left-0 top-2 bottom-2 w-0.5 rounded-r bg-blue-500" />
+                    <span
+                      className={`absolute left-0 top-2 bottom-2 w-0.5 rounded-r ${
+                        isCleanup ? 'bg-red-500' : 'bg-blue-500'
+                      }`}
+                    />
                   )}
-                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-blue-400' : 'text-zinc-500'}`} />
+                  <Icon
+                    className={`w-4 h-4 shrink-0 ${
+                      isActive
+                        ? isCleanup
+                          ? 'text-red-400'
+                          : 'text-blue-400'
+                        : isCleanup
+                        ? 'text-red-400/70'
+                        : 'text-zinc-500'
+                    }`}
+                  />
                   <span className="truncate">{tab.label}</span>
                 </button>
               );
@@ -1202,8 +1283,161 @@ export function SettingsPage() {
               </div>
             </div>
           )}
+
+          {activeTab === 'cleanup' && isSuperAdmin && (
+            <section className="bg-[#111216] border border-red-500/20 rounded-xl overflow-hidden">
+              <div className="px-6 py-4 border-b border-white/[0.06] bg-[#0D0E12] flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-sm font-medium text-white flex items-center gap-2">
+                    <Trash2 className="w-4 h-4 text-red-400" />
+                    Data Cleanup &amp; Test Record Purge
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Super-admin utility to scan and permanently erase test data (e.g., &ldquo;Gikicho&rdquo;) across all 9 business collections.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-6">
+                <form onSubmit={(e) => void handleScanPurge(e)} className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={purgeKeyword}
+                      onChange={(e) => {
+                        setPurgeKeyword(e.target.value);
+                        if (purgeScan) setPurgeScan(null);
+                      }}
+                      aria-label="Keyword or business name to scan"
+                      placeholder="Enter keyword or test business name (e.g. Gikicho)..."
+                      className={`${INPUT_CLASS} pl-9`}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={scanningPurge || executingPurge || purgeKeyword.trim().length < 2}
+                    className="inline-flex items-center justify-center gap-2 px-5 py-2 min-h-[40px] text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50 shrink-0"
+                  >
+                    <Search className="w-3.5 h-3.5" />
+                    {scanningPurge ? 'Scanning Firestore...' : 'Scan Firestore'}
+                  </button>
+                </form>
+
+                <div className="p-4 rounded-xl bg-[#09090B] border border-white/[0.07] text-xs text-zinc-400 leading-relaxed">
+                  Scanning checks <span className="text-zinc-200">clients, leads, websites, subscriptions, invoices, payments, payment references, notifications,</span> and <span className="text-zinc-200">activity logs</span>, including cascading records linked by <code className="font-mono text-zinc-300">clientId</code> or <code className="font-mono text-zinc-300">recordId</code>. Admin accounts and settings are never affected.
+                </div>
+
+                {purgeScan && (
+                  <div className="space-y-5 pt-2 border-t border-white/[0.07]">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-white">
+                          Scan Results for &ldquo;{purgeScan.keyword}&rdquo;
+                        </p>
+                        <p className="text-xs text-zinc-400 mt-0.5 font-mono-tabular">
+                          {purgeScan.totalMatched} total Firestore document{purgeScan.totalMatched === 1 ? '' : 's'} queued for removal
+                        </p>
+                      </div>
+                      {purgeScan.totalMatched > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmPurgeOpen(true)}
+                          disabled={executingPurge}
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[40px] text-xs font-semibold bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors disabled:opacity-50 shrink-0"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Purge All Matching Records ({purgeScan.totalMatched})
+                        </button>
+                      )}
+                    </div>
+
+                    {/* 9-Collection Breakdown */}
+                    <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
+                      {(
+                        [
+                          ['Clients', purgeScan.counts.clients],
+                          ['Leads', purgeScan.counts.leads],
+                          ['Websites', purgeScan.counts.websites],
+                          ['Subs', purgeScan.counts.subscriptions],
+                          ['Invoices', purgeScan.counts.invoices],
+                          ['Payments', purgeScan.counts.payments],
+                          ['Pay Refs', purgeScan.counts.paymentReferences],
+                          ['Alerts', purgeScan.counts.notifications],
+                          ['Logs', purgeScan.counts.activityLogs],
+                        ] as const
+                      ).map(([label, count]) => (
+                        <div
+                          key={label}
+                          className="p-2.5 rounded-lg bg-[#09090B] border border-white/[0.07] text-center"
+                        >
+                          <p className="text-[10px] text-zinc-500 uppercase tracking-wider">{label}</p>
+                          <p
+                            className={`mt-1 font-mono-tabular text-sm font-semibold ${
+                              count > 0 ? 'text-red-400' : 'text-zinc-500'
+                            }`}
+                          >
+                            {count}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {purgeScan.items.length > 0 ? (
+                      <div className="border border-white/[0.08] rounded-xl bg-[#09090B] overflow-hidden">
+                        <div className="px-4 py-2.5 border-b border-white/[0.06] bg-[#0D0E12] flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                          <span>Matched Document Preview</span>
+                          <span className="font-mono-tabular">
+                            Showing {Math.min(50, purgeScan.items.length)} of {purgeScan.items.length}
+                          </span>
+                        </div>
+                        <div className="max-h-72 overflow-y-auto divide-y divide-white/[0.06]">
+                          {purgeScan.items.slice(0, 50).map((item) => (
+                            <div
+                              key={`${item.collection}-${item.id}`}
+                              className="px-4 py-2.5 flex items-center justify-between gap-3 text-xs"
+                            >
+                              <div className="min-w-0">
+                                <p className="font-medium text-white truncate">{item.label}</p>
+                                {item.detail && (
+                                  <p className="text-[11px] text-zinc-400 truncate mt-0.5">{item.detail}</p>
+                                )}
+                              </div>
+                              <span className="px-2 py-0.5 rounded bg-white/[0.05] border border-white/[0.08] text-[10px] font-medium text-zinc-300 shrink-0">
+                                {item.collection}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-6 rounded-xl bg-[#09090B] border border-white/[0.07] text-center text-xs text-zinc-400">
+                        Zero records found matching &ldquo;{purgeScan.keyword}&rdquo;.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
         </div>
       </div>
+
+      <ConfirmModal
+        open={confirmPurgeOpen}
+        title="Confirm Permanent Data Purge"
+        description={
+          purgeScan
+            ? `This will permanently delete ${purgeScan.totalMatched} Firestore document${purgeScan.totalMatched === 1 ? '' : 's'} matching "${purgeScan.keyword}" across all selected collections (${purgeScan.counts.clients} clients, ${purgeScan.counts.leads} leads, ${purgeScan.counts.websites} websites, ${purgeScan.counts.subscriptions} subscriptions, ${purgeScan.counts.invoices} invoices, ${purgeScan.counts.payments} payments, ${purgeScan.counts.notifications} alerts, ${purgeScan.counts.activityLogs} logs). This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Purge All Permanently"
+        tone="danger"
+        requireConfirmText="DELETE"
+        busy={executingPurge}
+        onConfirm={handleExecutePurge}
+        onCancel={() => setConfirmPurgeOpen(false)}
+      />
     </div>
   );
 }

@@ -7,10 +7,13 @@ import {
   Download,
   Pencil,
   X,
+  Trash2,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/ToastContext';
 import { SlideOverModal } from '../components/ui/SlideOverModal';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { StatusIndicator } from '../components/ui/StatusBadge';
 import {
   EmptyState,
@@ -27,6 +30,7 @@ import {
 } from '../components/ui/DataTableControls';
 import {
   createInvoice,
+  permanentlyDeleteInvoice,
   updateInvoice,
   type InvoiceInput,
 } from '../services/emgFirestore';
@@ -54,12 +58,14 @@ type InvoiceSortKey = 'invoiceNumber' | 'clientName' | 'dueDate' | 'amount' | 's
 export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: InvoicesPageProps) {
   const { invoices, clients, subscriptions, settings, loading, syncError, retrySync } = useData();
   const { showToast } = useToast();
+  const { isSuperAdmin } = useAuth();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [formOpen, setFormOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [previewInvoice, setPreviewInvoice] = useState<Invoice | null>(null);
+  const [deletingInvoice, setDeletingInvoice] = useState<Invoice | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const { sort, toggleSort } = useTableSort<InvoiceSortKey>('dueDate', 'desc');
@@ -258,6 +264,23 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
     }
   };
 
+  const handlePermanentDeleteInvoice = async () => {
+    if (!deletingInvoice) return;
+    setSubmitting(true);
+    try {
+      await permanentlyDeleteInvoice(deletingInvoice);
+      showToast(`Permanently deleted invoice ${deletingInvoice.invoiceNumber}.`, 'success');
+      if (previewInvoice?.id === deletingInvoice.id) {
+        setPreviewInvoice(null);
+      }
+      setDeletingInvoice(null);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to delete invoice.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="no-print">
@@ -409,6 +432,16 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
+                    {isSuperAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setDeletingInvoice(inv)}
+                        aria-label={`Permanently delete invoice ${inv.invoiceNumber}`}
+                        className="p-2 min-h-[40px] min-w-[40px] inline-flex items-center justify-center text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -489,6 +522,17 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
                           >
                             <Pencil className="w-4 h-4" />
                           </button>
+                          {isSuperAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => setDeletingInvoice(inv)}
+                              title="Permanently Delete Invoice"
+                              aria-label={`Permanently delete invoice ${inv.invoiceNumber}`}
+                              className="p-2 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -853,6 +897,22 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={Boolean(deletingInvoice)}
+        title="Permanently Delete Invoice"
+        description={
+          deletingInvoice
+            ? `Permanently delete invoice ${deletingInvoice.invoiceNumber} for ${deletingInvoice.clientName} and its linked alerts? This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Permanently Delete"
+        tone="danger"
+        requireConfirmText="DELETE"
+        busy={submitting}
+        onConfirm={handlePermanentDeleteInvoice}
+        onCancel={() => setDeletingInvoice(null)}
+      />
     </div>
   );
 }

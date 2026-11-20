@@ -2,10 +2,14 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
+  query,
   setDoc,
   updateDoc,
+  where,
   writeBatch,
   serverTimestamp,
+  type DocumentReference,
   type WriteBatch,
 } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
@@ -40,11 +44,13 @@ import {
   type LeadInterest,
   type LeadStatus,
   type NotificationPreferences,
+  type Payment,
   type PaymentMethod,
   type PaymentStatus,
   type Subscription,
   type SubscriptionPackage,
   type SubscriptionStatus,
+  type Website,
   type WebsiteDeploymentStatus,
 } from '../types/domain';
 
@@ -1205,5 +1211,577 @@ export async function saveAdminProfile(adminData: {
     await batch.commit();
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `admins/${adminData.uid}`);
+  }
+}
+
+// ---------------------------------------------------------
+// Permanent Deletion & Test Data Cleanup (Super Admin Only)
+// ---------------------------------------------------------
+async function commitDeleteRefsInChunks(
+  refs: DocumentReference[],
+  auditLog?: {
+    actionType: string;
+    entityType: ActivityEntityType;
+    recordId: string;
+    summary: string;
+  }
+): Promise<number> {
+  requireAdminAuth();
+  const uniqueRefs = Array.from(new Map(refs.map((r) => [r.path, r])).values());
+  if (uniqueRefs.length === 0 && !auditLog) return 0;
+
+  const CHUNK_SIZE = 400;
+  for (let i = 0; i < uniqueRefs.length; i += CHUNK_SIZE) {
+    const chunk = uniqueRefs.slice(i, i + CHUNK_SIZE);
+    const batch = writeBatch(db);
+    for (const ref of chunk) {
+      batch.delete(ref);
+    }
+    const isLast = i + CHUNK_SIZE >= uniqueRefs.length;
+    if (isLast && auditLog) {
+      addActivityToBatch(
+        batch,
+        auditLog.actionType,
+        auditLog.entityType,
+        auditLog.recordId,
+        auditLog.summary
+      );
+    }
+    await batch.commit();
+  }
+
+  if (uniqueRefs.length === 0 && auditLog) {
+    const batch = writeBatch(db);
+    addActivityToBatch(
+      batch,
+      auditLog.actionType,
+      auditLog.entityType,
+      auditLog.recordId,
+      auditLog.summary
+    );
+    await batch.commit();
+  }
+
+  return uniqueRefs.length;
+}
+
+export async function permanentlyDeleteClientCascade(
+  client: Client,
+  options?: { deleteRelatedLogs?: boolean; deleteSourceLead?: boolean }
+): Promise<{ deletedCount: number; breakdown: Record<string, number> }> {
+  requireAdminAuth();
+  const deleteLogs = options?.deleteRelatedLogs ?? true;
+  const deleteLead = options?.deleteSourceLead ?? true;
+
+  try {
+    const [webSnap, subSnap, invSnap, paySnap, notifClientSnap, leadSnap] = await Promise.all([
+      getDocs(query(collection(db, 'websites'), where('clientId', '==', client.id))),
+      getDocs(query(collection(db, 'subscriptions'), where('clientId', '==', client.id))),
+      getDocs(query(collection(db, 'invoices'), where('clientId', '==', client.id))),
+      getDocs(query(collection(db, 'payments'), where('clientId', '==', client.id))),
+      getDocs(query(collection(db, 'notifications'), where('clientId', '==', client.id))),
+      deleteLead
+        ? getDocs(query(collection(db, 'leads'), where('convertedClientId', '==', client.id)))
+        : Promise.resolve(null),
+    ]);
+
+    const refs: DocumentReference[] = [doc(db, 'clients', client.id)];
+    const relatedIds = new Set<string>([client.id]);
+
+    webSnap.docs.forEach((d) => {
+      refs.push(d.ref);
+      relatedIds.add(d.id);
+    });
+    subSnap.docs.forEach((d) => {
+      refs.push(d.ref);
+      relatedIds.add(d.id);
+    });
+    invSnap.docs.forEach((d) => {
+      refs.push(d.ref);
+      relatedIds.add(d.id);
+    });
+    let payRefCount = 0;
+    paySnap.docs.forEach((d) => {
+      refs.push(d.ref);
+      relatedIds.add(d.id);
+      const normRef = (d.data() as Partial<Payment>).normalizedReference;
+      if (normRef && /^[a-zA-Z0-9_-]{1,128}$/.test(normRef)) {
+        refs.push(doc(db, 'payment_references', normRef));
+        payRefCount += 1;
+      }
+    });
+
+    if (client.sourceLeadId && deleteLead) {
+      relatedIds.add(client.sourceLeadId);
+      refs.push(doc(db, 'leads', client.sourceLeadId));
+    }
+    let deletedLeadCount = 0;
+    if (leadSnap) {
+      leadSnap.docs.forEach((d) => {
+        refs.push(d.ref);
+        relatedIds.add(d.id);
+        deletedLeadCount += 1;
+      });
+    }
+
+    const notifIdsSeen = new Set<string>();
+    notifClientSnap.docs.forEach((d) => {
+      refs.push(d.ref);
+      notifIdsSeen.add(d.id);
+    });
+
+    // Also catch notifications referencing any of the record IDs directly
+    const allNotifsSnap = await getDocs(collection(db, 'notifications'));
+    allNotifsSnap.docs.forEach((d) => {
+      const data = d.data() as { recordId?: string; clientId?: string };
+      if (
+        !notifIdsSeen.has(d.id) &&
+        ((data.recordId && relatedIds.has(data.recordId)) || data.clientId === client.id)
+      ) {
+        refs.push(d.ref);
+        notifIdsSeen.add(d.id);
+      }
+    });
+
+    let logsCount = 0;
+    if (deleteLogs) {
+      const logsSnap = await getDocs(collection(db, 'activity_logs'));
+      const needleName = client.businessName.trim().toLowerCase();
+      const needleCode = client.clientCode.trim().toLowerCase();
+      logsSnap.docs.forEach((d) => {
+        const data = d.data() as { recordId?: string; summary?: string };
+        const summaryLower = (data.summary || '').toLowerCase();
+        if (
+          (data.recordId && relatedIds.has(data.recordId)) ||
+          (needleName && summaryLower.includes(needleName)) ||
+          (needleCode && summaryLower.includes(needleCode))
+        ) {
+          refs.push(d.ref);
+          logsCount += 1;
+        }
+      });
+    }
+
+    const deletedCount = await commitDeleteRefsInChunks(
+      refs,
+      deleteLogs
+        ? undefined
+        : {
+            actionType: 'CLIENT_DELETED_PERMANENTLY',
+            entityType: 'client',
+            recordId: client.id,
+            summary: `Permanently deleted client ${client.businessName} (${client.clientCode}) and linked records`,
+          }
+    );
+
+    return {
+      deletedCount,
+      breakdown: {
+        clients: 1,
+        websites: webSnap.size,
+        subscriptions: subSnap.size,
+        invoices: invSnap.size,
+        payments: paySnap.size,
+        paymentReferences: payRefCount,
+        leads: deletedLeadCount + (client.sourceLeadId && deleteLead ? 1 : 0),
+        notifications: notifIdsSeen.size,
+        activityLogs: logsCount,
+      },
+    };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `clients/${client.id}`);
+  }
+}
+
+export async function permanentlyDeleteLead(
+  lead: Lead,
+  options?: { deleteRelatedLogs?: boolean }
+): Promise<number> {
+  requireAdminAuth();
+  const deleteLogs = options?.deleteRelatedLogs ?? true;
+  try {
+    const refs: DocumentReference[] = [doc(db, 'leads', lead.id)];
+    const notifsSnap = await getDocs(
+      query(collection(db, 'notifications'), where('recordId', '==', lead.id))
+    );
+    notifsSnap.docs.forEach((d) => refs.push(d.ref));
+
+    if (deleteLogs) {
+      const logsSnap = await getDocs(
+        query(collection(db, 'activity_logs'), where('recordId', '==', lead.id))
+      );
+      logsSnap.docs.forEach((d) => refs.push(d.ref));
+    }
+
+    return await commitDeleteRefsInChunks(
+      refs,
+      deleteLogs
+        ? undefined
+        : {
+            actionType: 'LEAD_DELETED_PERMANENTLY',
+            entityType: 'lead',
+            recordId: lead.id,
+            summary: `Permanently deleted lead ${lead.businessName} (${lead.leadCode})`,
+          }
+    );
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `leads/${lead.id}`);
+  }
+}
+
+export async function permanentlyDeleteWebsite(website: Website): Promise<number> {
+  requireAdminAuth();
+  try {
+    const refs: DocumentReference[] = [doc(db, 'websites', website.id)];
+    const notifsSnap = await getDocs(
+      query(collection(db, 'notifications'), where('recordId', '==', website.id))
+    );
+    notifsSnap.docs.forEach((d) => refs.push(d.ref));
+    return await commitDeleteRefsInChunks(refs, {
+      actionType: 'WEBSITE_DELETED_PERMANENTLY',
+      entityType: 'website',
+      recordId: website.id,
+      summary: `Permanently deleted website ${website.websiteName} (${website.websiteCode})`,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `websites/${website.id}`);
+  }
+}
+
+export async function permanentlyDeleteSubscription(sub: Subscription): Promise<number> {
+  requireAdminAuth();
+  try {
+    const refs: DocumentReference[] = [doc(db, 'subscriptions', sub.id)];
+    const notifsSnap = await getDocs(
+      query(collection(db, 'notifications'), where('recordId', '==', sub.id))
+    );
+    notifsSnap.docs.forEach((d) => refs.push(d.ref));
+    return await commitDeleteRefsInChunks(refs, {
+      actionType: 'SUBSCRIPTION_DELETED_PERMANENTLY',
+      entityType: 'subscription',
+      recordId: sub.id,
+      summary: `Permanently deleted subscription ${sub.subscriptionCode} for ${sub.clientName}`,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `subscriptions/${sub.id}`);
+  }
+}
+
+export async function permanentlyDeleteInvoice(invoice: Invoice): Promise<number> {
+  requireAdminAuth();
+  try {
+    const refs: DocumentReference[] = [doc(db, 'invoices', invoice.id)];
+    const notifsSnap = await getDocs(
+      query(collection(db, 'notifications'), where('recordId', '==', invoice.id))
+    );
+    notifsSnap.docs.forEach((d) => refs.push(d.ref));
+    return await commitDeleteRefsInChunks(refs, {
+      actionType: 'INVOICE_DELETED_PERMANENTLY',
+      entityType: 'invoice',
+      recordId: invoice.id,
+      summary: `Permanently deleted invoice ${invoice.invoiceNumber} (${invoice.clientName})`,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `invoices/${invoice.id}`);
+  }
+}
+
+export async function permanentlyDeletePayment(payment: Payment): Promise<number> {
+  requireAdminAuth();
+  try {
+    const refs: DocumentReference[] = [doc(db, 'payments', payment.id)];
+    if (payment.normalizedReference && /^[a-zA-Z0-9_-]{1,128}$/.test(payment.normalizedReference)) {
+      refs.push(doc(db, 'payment_references', payment.normalizedReference));
+    }
+    const notifsSnap = await getDocs(
+      query(collection(db, 'notifications'), where('recordId', '==', payment.id))
+    );
+    notifsSnap.docs.forEach((d) => refs.push(d.ref));
+    return await commitDeleteRefsInChunks(refs, {
+      actionType: 'PAYMENT_DELETED_PERMANENTLY',
+      entityType: 'payment',
+      recordId: payment.id,
+      summary: `Permanently deleted payment ${payment.paymentCode} (${payment.transactionReference})`,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `payments/${payment.id}`);
+  }
+}
+
+export async function permanentlyDeleteNotification(notificationId: string): Promise<void> {
+  requireAdminAuth();
+  try {
+    await commitDeleteRefsInChunks([doc(db, 'notifications', notificationId)]);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `notifications/${notificationId}`);
+  }
+}
+
+export interface PurgePreviewItem {
+  collection: string;
+  id: string;
+  label: string;
+  detail: string;
+}
+
+export interface PurgeScanResult {
+  keyword: string;
+  counts: {
+    clients: number;
+    leads: number;
+    websites: number;
+    subscriptions: number;
+    invoices: number;
+    payments: number;
+    paymentReferences: number;
+    notifications: number;
+    activityLogs: number;
+  };
+  totalMatched: number;
+  items: PurgePreviewItem[];
+  refs: DocumentReference[];
+}
+
+export async function findMatchingRecordsForPurge(keyword: string): Promise<PurgeScanResult> {
+  requireAdminAuth();
+  const needle = keyword.trim().toLowerCase();
+  if (needle.length < 2) {
+    throw new Error('Enter at least 2 characters to scan records.');
+  }
+
+  try {
+    const [
+      clientsSnap,
+      leadsSnap,
+      websitesSnap,
+      subsSnap,
+      invoicesSnap,
+      paymentsSnap,
+      notifsSnap,
+      logsSnap,
+    ] = await Promise.all([
+      getDocs(collection(db, 'clients')),
+      getDocs(collection(db, 'leads')),
+      getDocs(collection(db, 'websites')),
+      getDocs(collection(db, 'subscriptions')),
+      getDocs(collection(db, 'invoices')),
+      getDocs(collection(db, 'payments')),
+      getDocs(collection(db, 'notifications')),
+      getDocs(collection(db, 'activity_logs')),
+    ]);
+
+    const matchesText = (...fields: Array<string | undefined | null>) =>
+      fields.some((f) => Boolean(f) && String(f).toLowerCase().includes(needle));
+
+    const matchedClientIds = new Set<string>();
+    const matchedRecordIds = new Set<string>();
+    const refs: DocumentReference[] = [];
+    const items: PurgePreviewItem[] = [];
+
+    const counts = {
+      clients: 0,
+      leads: 0,
+      websites: 0,
+      subscriptions: 0,
+      invoices: 0,
+      payments: 0,
+      paymentReferences: 0,
+      notifications: 0,
+      activityLogs: 0,
+    };
+
+    clientsSnap.docs.forEach((d) => {
+      const c = d.data() as Client;
+      if (
+        matchesText(
+          c.businessName,
+          c.contactName,
+          c.clientCode,
+          c.domainName,
+          c.websiteUrl,
+          c.email,
+          c.phone,
+          c.notes
+        )
+      ) {
+        matchedClientIds.add(d.id);
+        matchedRecordIds.add(d.id);
+        if (c.sourceLeadId) matchedRecordIds.add(c.sourceLeadId);
+        refs.push(d.ref);
+        counts.clients += 1;
+        items.push({
+          collection: 'Client',
+          id: d.id,
+          label: c.businessName,
+          detail: `${c.clientCode} · ${c.contactName}`,
+        });
+      }
+    });
+
+    leadsSnap.docs.forEach((d) => {
+      const l = d.data() as Lead;
+      if (
+        matchedRecordIds.has(d.id) ||
+        (l.convertedClientId && matchedClientIds.has(l.convertedClientId)) ||
+        matchesText(
+          l.businessName,
+          l.contactPerson,
+          l.leadCode,
+          l.phone,
+          l.existingWebsite,
+          l.previewUrl,
+          l.socialLink,
+          l.notes
+        )
+      ) {
+        matchedRecordIds.add(d.id);
+        refs.push(d.ref);
+        counts.leads += 1;
+        items.push({
+          collection: 'Lead',
+          id: d.id,
+          label: l.businessName,
+          detail: `${l.leadCode} · ${l.status}`,
+        });
+      }
+    });
+
+    websitesSnap.docs.forEach((d) => {
+      const w = d.data() as Website;
+      if (
+        matchedClientIds.has(w.clientId) ||
+        matchesText(w.businessName, w.websiteName, w.websiteCode, w.domain, w.liveUrl, w.technicalNotes)
+      ) {
+        matchedRecordIds.add(d.id);
+        refs.push(d.ref);
+        counts.websites += 1;
+        items.push({
+          collection: 'Website',
+          id: d.id,
+          label: w.websiteName,
+          detail: `${w.websiteCode} · ${w.businessName}`,
+        });
+      }
+    });
+
+    subsSnap.docs.forEach((d) => {
+      const s = d.data() as Subscription;
+      if (
+        matchedClientIds.has(s.clientId) ||
+        matchesText(s.clientName, s.subscriptionCode, s.packageName, s.notes)
+      ) {
+        matchedRecordIds.add(d.id);
+        refs.push(d.ref);
+        counts.subscriptions += 1;
+        items.push({
+          collection: 'Subscription',
+          id: d.id,
+          label: `${s.clientName} (${s.packageName})`,
+          detail: s.subscriptionCode,
+        });
+      }
+    });
+
+    invoicesSnap.docs.forEach((d) => {
+      const inv = d.data() as Invoice;
+      if (
+        matchedClientIds.has(inv.clientId) ||
+        matchesText(inv.clientName, inv.invoiceNumber, inv.description, inv.notes)
+      ) {
+        matchedRecordIds.add(d.id);
+        refs.push(d.ref);
+        counts.invoices += 1;
+        items.push({
+          collection: 'Invoice',
+          id: d.id,
+          label: `${inv.invoiceNumber} — ${inv.clientName}`,
+          detail: inv.status,
+        });
+      }
+    });
+
+    paymentsSnap.docs.forEach((d) => {
+      const p = d.data() as Payment;
+      if (
+        matchedClientIds.has(p.clientId) ||
+        matchesText(p.clientName, p.paymentCode, p.transactionReference, p.notes)
+      ) {
+        matchedRecordIds.add(d.id);
+        refs.push(d.ref);
+        counts.payments += 1;
+        if (p.normalizedReference && /^[a-zA-Z0-9_-]{1,128}$/.test(p.normalizedReference)) {
+          refs.push(doc(db, 'payment_references', p.normalizedReference));
+          counts.paymentReferences += 1;
+        }
+        items.push({
+          collection: 'Payment',
+          id: d.id,
+          label: `${p.paymentCode} — ${p.clientName}`,
+          detail: p.transactionReference,
+        });
+      }
+    });
+
+    notifsSnap.docs.forEach((d) => {
+      const n = d.data() as {
+        clientId?: string;
+        recordId?: string;
+        clientName?: string;
+        title?: string;
+        message?: string;
+      };
+      if (
+        (n.clientId && matchedClientIds.has(n.clientId)) ||
+        (n.recordId && matchedRecordIds.has(n.recordId)) ||
+        matchesText(n.clientName, n.title, n.message)
+      ) {
+        refs.push(d.ref);
+        counts.notifications += 1;
+        items.push({
+          collection: 'Notification',
+          id: d.id,
+          label: n.title || 'Alert',
+          detail: n.clientName || n.recordId || '',
+        });
+      }
+    });
+
+    logsSnap.docs.forEach((d) => {
+      const log = d.data() as { recordId?: string; actionType?: string; summary?: string };
+      if (
+        (log.recordId && matchedRecordIds.has(log.recordId)) ||
+        matchesText(log.summary, log.recordId)
+      ) {
+        refs.push(d.ref);
+        counts.activityLogs += 1;
+        items.push({
+          collection: 'Activity Log',
+          id: d.id,
+          label: log.actionType || 'LOG',
+          detail: log.summary || '',
+        });
+      }
+    });
+
+    const uniqueRefs = Array.from(new Map(refs.map((r) => [r.path, r])).values());
+
+    return {
+      keyword: keyword.trim(),
+      counts,
+      totalMatched: uniqueRefs.length,
+      items,
+      refs: uniqueRefs,
+    };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, 'purge_scan');
+  }
+}
+
+export async function executePurgeMatch(scan: PurgeScanResult): Promise<number> {
+  requireAdminAuth();
+  try {
+    return await commitDeleteRefsInChunks(scan.refs);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, 'purge_execute');
   }
 }

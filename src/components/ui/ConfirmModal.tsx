@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 
 interface ConfirmModalProps {
@@ -8,6 +8,7 @@ interface ConfirmModalProps {
   confirmLabel: string;
   tone?: 'danger' | 'warning' | 'primary';
   busy?: boolean;
+  requireConfirmText?: string;
   onConfirm: () => void | Promise<void>;
   onCancel: () => void;
 }
@@ -19,9 +20,18 @@ export function ConfirmModal({
   confirmLabel,
   tone = 'danger',
   busy = false,
+  requireConfirmText,
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
+  const [typedText, setTypedText] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      setTypedText('');
+    }
+  }, [open, requireConfirmText]);
+
   useEffect(() => {
     if (!open || busy) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -32,6 +42,10 @@ export function ConfirmModal({
   }, [open, busy, onCancel]);
 
   if (!open) return null;
+
+  const confirmSatisfied =
+    !requireConfirmText ||
+    typedText.trim().toUpperCase() === requireConfirmText.trim().toUpperCase();
 
   return (
     <div
@@ -58,7 +72,9 @@ export function ConfirmModal({
               <h3 id="confirm-modal-title" className="font-display text-base font-semibold text-white">
                 {title}
               </h3>
-              <p className="mt-1.5 text-sm text-zinc-300 leading-relaxed">{description}</p>
+              <p className="mt-1.5 text-sm text-zinc-300 leading-relaxed whitespace-pre-line">
+                {description}
+              </p>
             </div>
           </div>
           <button
@@ -72,6 +88,24 @@ export function ConfirmModal({
           </button>
         </div>
 
+        {requireConfirmText && (
+          <div className="space-y-1.5 pt-1">
+            <label htmlFor="confirm-typed-input" className="block text-xs text-zinc-400">
+              Type <span className="font-mono font-semibold text-red-300">{requireConfirmText}</span> to permanently confirm
+            </label>
+            <input
+              id="confirm-typed-input"
+              type="text"
+              autoComplete="off"
+              value={typedText}
+              onChange={(e) => setTypedText(e.target.value)}
+              placeholder={requireConfirmText}
+              disabled={busy}
+              className="w-full px-3 py-2 min-h-[38px] text-sm font-mono bg-[#09090B] border border-white/[0.12] rounded-lg text-white placeholder:text-zinc-600 focus:outline-none focus:border-red-500"
+            />
+          </div>
+        )}
+
         <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-white/[0.07]">
           <button
             type="button"
@@ -84,8 +118,8 @@ export function ConfirmModal({
           <button
             type="button"
             onClick={() => void onConfirm()}
-            disabled={busy}
-            className={`px-4 py-2 min-h-[38px] text-sm font-medium text-white rounded-lg transition-colors whitespace-nowrap disabled:opacity-50 ${
+            disabled={busy || !confirmSatisfied}
+            className={`px-4 py-2 min-h-[38px] text-sm font-medium text-white rounded-lg transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed ${
               tone === 'danger'
                 ? 'bg-red-600 hover:bg-red-500'
                 : tone === 'warning'

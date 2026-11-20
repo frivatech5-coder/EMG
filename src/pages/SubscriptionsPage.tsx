@@ -6,8 +6,10 @@ import {
   RefreshCw,
   Ban,
   AlertTriangle,
+  Trash2,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/ToastContext';
 import { SlideOverModal } from '../components/ui/SlideOverModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
@@ -27,6 +29,7 @@ import {
 } from '../components/ui/DataTableControls';
 import {
   createSubscription,
+  permanentlyDeleteSubscription,
   updateSubscription,
   type SubscriptionInput,
 } from '../services/emgFirestore';
@@ -65,6 +68,7 @@ export function SubscriptionsPage({
 }: SubscriptionsPageProps) {
   const { subscriptions, clients, settings, loading, syncError, retrySync } = useData();
   const { showToast } = useToast();
+  const { isSuperAdmin } = useAuth();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -72,6 +76,7 @@ export function SubscriptionsPage({
   const [formOpen, setFormOpen] = useState(false);
   const [editingSub, setEditingSub] = useState<Subscription | null>(null);
   const [cancellingSub, setCancellingSub] = useState<Subscription | null>(null);
+  const [deletingSub, setDeletingSub] = useState<Subscription | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -283,6 +288,20 @@ export function SubscriptionsPage({
     }
   };
 
+  const handlePermanentDeleteSub = async () => {
+    if (!deletingSub) return;
+    setSubmitting(true);
+    try {
+      await permanentlyDeleteSubscription(deletingSub);
+      showToast(`Permanently deleted subscription ${deletingSub.subscriptionCode}.`, 'success');
+      setDeletingSub(null);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to delete subscription.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const renderCycleTimeline = (sub: Subscription, effStatus: string) => {
     if (effStatus === 'Cancelled') {
       return <span className="text-[11px] text-zinc-500">Ended</span>;
@@ -483,9 +502,20 @@ export function SubscriptionsPage({
                       <button
                         type="button"
                         onClick={() => setCancellingSub(sub)}
-                        className="px-3 py-2 text-xs font-medium text-red-300 bg-red-500/15 rounded-lg min-h-[38px]"
+                        className="px-3 py-2 text-xs font-medium text-amber-300 bg-amber-500/15 rounded-lg min-h-[38px]"
                       >
                         Cancel
+                      </button>
+                    )}
+                    {isSuperAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setDeletingSub(sub)}
+                        aria-label={`Permanently delete ${sub.subscriptionCode}`}
+                        className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium text-red-400 bg-red-500/10 hover:bg-red-500/20 rounded-lg min-h-[38px]"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete
                       </button>
                     )}
                   </div>
@@ -562,9 +592,20 @@ export function SubscriptionsPage({
                               onClick={() => setCancellingSub(sub)}
                               title="Cancel Subscription"
                               aria-label={`Cancel ${sub.subscriptionCode}`}
-                              className="p-2 text-zinc-400 hover:text-red-400 hover:bg-white/[0.06] rounded-md transition-colors"
+                              className="p-2 text-zinc-400 hover:text-amber-400 hover:bg-white/[0.06] rounded-md transition-colors"
                             >
                               <Ban className="w-4 h-4" />
+                            </button>
+                          )}
+                          {isSuperAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => setDeletingSub(sub)}
+                              title="Permanently Delete Subscription"
+                              aria-label={`Permanently delete ${sub.subscriptionCode}`}
+                              className="p-2 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           )}
                         </div>
@@ -794,10 +835,26 @@ export function SubscriptionsPage({
             : ''
         }
         confirmLabel="Cancel Subscription"
-        tone="danger"
+        tone="warning"
         busy={submitting}
         onConfirm={handleCancelConfirm}
         onCancel={() => setCancellingSub(null)}
+      />
+
+      <ConfirmModal
+        open={Boolean(deletingSub)}
+        title="Permanently Delete Subscription"
+        description={
+          deletingSub
+            ? `Permanently delete subscription ${deletingSub.subscriptionCode} for ${deletingSub.clientName} and its linked alerts? This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Permanently Delete"
+        tone="danger"
+        requireConfirmText="DELETE"
+        busy={submitting}
+        onConfirm={handlePermanentDeleteSub}
+        onCancel={() => setDeletingSub(null)}
       />
     </div>
   );

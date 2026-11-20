@@ -7,8 +7,10 @@ import {
   RotateCcw,
   Copy,
   Check,
+  Trash2,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/ToastContext';
 import { SlideOverModal } from '../components/ui/SlideOverModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
@@ -32,6 +34,7 @@ import {
   useTableSort,
 } from '../components/ui/DataTableControls';
 import {
+  permanentlyDeletePayment,
   recordManualPayment,
   updatePaymentStatus,
   type PaymentInput,
@@ -62,6 +65,7 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
   const { payments, clients, subscriptions, invoices, settings, loading, syncError, retrySync } =
     useData();
   const { showToast } = useToast();
+  const { isSuperAdmin } = useAuth();
 
   const [search, setSearch] = useState('');
   const [methodFilter, setMethodFilter] = useState<string>('ALL');
@@ -73,6 +77,7 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
     payment: Payment;
     nextStatus: PaymentStatus;
   } | null>(null);
+  const [deletingPayment, setDeletingPayment] = useState<Payment | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -269,6 +274,23 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
     }
   };
 
+  const handlePermanentDeletePayment = async () => {
+    if (!deletingPayment) return;
+    setSubmitting(true);
+    try {
+      await permanentlyDeletePayment(deletingPayment);
+      showToast(
+        `Permanently deleted payment ${deletingPayment.paymentCode} (${deletingPayment.transactionReference}).`,
+        'success'
+      );
+      setDeletingPayment(null);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to delete payment.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleCopyRef = (id: string, ref: string) => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
       void navigator.clipboard.writeText(ref).then(() => {
@@ -457,8 +479,8 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
                     {formatKES(payment.amount, currency)}
                   </span>
                 </div>
-                {(payment.status === 'Paid' || payment.status === 'Pending') && (
-                  <div className="flex justify-end pt-2 border-t border-white/[0.06]">
+                {(payment.status === 'Paid' || payment.status === 'Pending' || isSuperAdmin) && (
+                  <div className="flex flex-wrap justify-end gap-2 pt-2 border-t border-white/[0.06]">
                     {payment.status === 'Paid' ? (
                       <button
                         type="button"
@@ -468,13 +490,24 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
                         <RotateCcw className="w-3.5 h-3.5" />
                         Refund
                       </button>
-                    ) : (
+                    ) : payment.status === 'Pending' ? (
                       <button
                         type="button"
                         onClick={() => setStatusTarget({ payment, nextStatus: 'Paid' })}
                         className="px-3 py-2 text-xs font-medium text-emerald-300 bg-emerald-500/15 rounded-lg min-h-[38px]"
                       >
                         Mark Paid
+                      </button>
+                    ) : null}
+                    {isSuperAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setDeletingPayment(payment)}
+                        aria-label={`Permanently delete ${payment.paymentCode}`}
+                        className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium text-red-400 bg-red-500/10 hover:bg-red-500/20 rounded-lg min-h-[38px]"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete
                       </button>
                     )}
                   </div>
@@ -539,27 +572,40 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
                       <StatusIndicator status={payment.status} />
                     </td>
                     <td className="py-3 px-4 text-right">
-                      {payment.status === 'Paid' ? (
-                        <button
-                          type="button"
-                          onClick={() => setStatusTarget({ payment, nextStatus: 'Refunded' })}
-                          title="Mark Refunded"
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-zinc-400 hover:text-amber-400 hover:bg-white/[0.06] rounded-md transition-colors"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                          Refund
-                        </button>
-                      ) : payment.status === 'Pending' ? (
-                        <button
-                          type="button"
-                          onClick={() => setStatusTarget({ payment, nextStatus: 'Paid' })}
-                          className="px-2.5 py-1.5 text-xs font-medium text-emerald-400 hover:bg-emerald-500/10 rounded-md transition-colors"
-                        >
-                          Mark Paid
-                        </button>
-                      ) : (
-                        <span className="text-xs text-zinc-600">—</span>
-                      )}
+                      <div className="inline-flex items-center justify-end gap-1">
+                        {payment.status === 'Paid' ? (
+                          <button
+                            type="button"
+                            onClick={() => setStatusTarget({ payment, nextStatus: 'Refunded' })}
+                            title="Mark Refunded"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-zinc-400 hover:text-amber-400 hover:bg-white/[0.06] rounded-md transition-colors"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            Refund
+                          </button>
+                        ) : payment.status === 'Pending' ? (
+                          <button
+                            type="button"
+                            onClick={() => setStatusTarget({ payment, nextStatus: 'Paid' })}
+                            className="px-2.5 py-1.5 text-xs font-medium text-emerald-400 hover:bg-emerald-500/10 rounded-md transition-colors"
+                          >
+                            Mark Paid
+                          </button>
+                        ) : !isSuperAdmin ? (
+                          <span className="text-xs text-zinc-600">—</span>
+                        ) : null}
+                        {isSuperAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => setDeletingPayment(payment)}
+                            title="Permanently Delete Payment"
+                            aria-label={`Permanently delete ${payment.paymentCode}`}
+                            className="p-2 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -802,6 +848,22 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
         busy={submitting}
         onConfirm={handleConfirmStatusUpdate}
         onCancel={() => setStatusTarget(null)}
+      />
+
+      <ConfirmModal
+        open={Boolean(deletingPayment)}
+        title="Permanently Delete Payment"
+        description={
+          deletingPayment
+            ? `Permanently delete payment ${deletingPayment.paymentCode} (Ref: ${deletingPayment.transactionReference}) for ${deletingPayment.clientName} and free its transaction reference lock? This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Permanently Delete"
+        tone="danger"
+        requireConfirmText="DELETE"
+        busy={submitting}
+        onConfirm={handlePermanentDeletePayment}
+        onCancel={() => setDeletingPayment(null)}
       />
     </div>
   );

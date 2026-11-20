@@ -9,10 +9,13 @@ import {
   CalendarClock,
   Kanban,
   List,
+  Trash2,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/ToastContext';
 import { SlideOverModal } from '../components/ui/SlideOverModal';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { StatusIndicator } from '../components/ui/StatusBadge';
 import {
   EmptyState,
@@ -34,6 +37,7 @@ import {
 import {
   convertLeadToClient,
   createLead,
+  permanentlyDeleteLead,
   updateLead,
   type ConvertLeadOptions,
   type LeadInput,
@@ -66,6 +70,7 @@ type LeadSortKey = 'businessName' | 'estimatedBudget' | 'followUpDate' | 'status
 export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPageProps) {
   const { leads, settings, loading, syncError, retrySync } = useData();
   const { showToast } = useToast();
+  const { isSuperAdmin } = useAuth();
 
   const [viewMode, setViewMode] = useState<'pipeline' | 'table'>('pipeline');
   const [search, setSearch] = useState('');
@@ -75,6 +80,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
   const [formOpen, setFormOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [convertingLead, setConvertingLead] = useState<Lead | null>(null);
+  const [deletingLead, setDeletingLead] = useState<Lead | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const { sort, toggleSort } = useTableSort<LeadSortKey>('followUpDate', 'asc');
@@ -349,6 +355,20 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
     }
   };
 
+  const handlePermanentDeleteLead = async () => {
+    if (!deletingLead) return;
+    setSubmitting(true);
+    try {
+      await permanentlyDeleteLead(deletingLead, { deleteRelatedLogs: true });
+      showToast(`Permanently deleted lead ${deletingLead.businessName}.`, 'success');
+      setDeletingLead(null);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to delete lead.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-5 animate-fade-in">
       <PageHeader
@@ -614,6 +634,17 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                                     <ExternalLink className="w-3.5 h-3.5" />
                                   </a>
                                 )}
+                                {isSuperAdmin && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeletingLead(lead)}
+                                    title="Permanently Delete Lead"
+                                    aria-label={`Permanently delete ${lead.businessName}`}
+                                    className="p-1 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                               </div>
 
                               {lead.status !== 'Converted' && (
@@ -708,6 +739,16 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                         <ExternalLink className="w-4 h-4" />
                       </a>
                     )}
+                    {isSuperAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setDeletingLead(lead)}
+                        aria-label={`Permanently delete ${lead.businessName}`}
+                        className="p-2 min-h-[40px] min-w-[40px] inline-flex items-center justify-center text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -800,6 +841,17 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                             >
                               <UserCheck className="w-3.5 h-3.5" />
                               Convert
+                            </button>
+                          )}
+                          {isSuperAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => setDeletingLead(lead)}
+                              title="Permanently Delete Lead"
+                              aria-label={`Permanently delete ${lead.businessName}`}
+                              className="p-2 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           )}
                         </div>
@@ -1267,6 +1319,22 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
           </form>
         )}
       </SlideOverModal>
+
+      <ConfirmModal
+        open={Boolean(deletingLead)}
+        title="Permanently Delete Lead"
+        description={
+          deletingLead
+            ? `Permanently delete ${deletingLead.businessName} (${deletingLead.leadCode}) and its related notifications and activity logs? This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Permanently Delete"
+        tone="danger"
+        requireConfirmText="DELETE"
+        busy={submitting}
+        onConfirm={handlePermanentDeleteLead}
+        onCancel={() => setDeletingLead(null)}
+      />
     </div>
   );
 }
