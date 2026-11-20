@@ -40,6 +40,7 @@ import {
   formatDisplayDate,
   formatKES,
   generateInvoicePdf,
+  resolveBrandLogoUrl,
   todayIso,
 } from '../lib/validation';
 import {
@@ -787,10 +788,10 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-3">
                     <img
-                      src={settings.logoUrl || '/assets/aistudio/emglogo0_fdf409c7.png'}
+                      src={resolveBrandLogoUrl(settings.logoUrl)}
                       alt={settings.businessName || 'EMG WEB SOLUTIONS'}
                       referrerPolicy="no-referrer"
-                      className="h-12 w-auto object-contain rounded"
+                      className="h-14 w-14 object-contain rounded"
                     />
                     <h2 className="text-2xl font-bold tracking-tight text-slate-900">
                       {settings.businessName || 'EMG WEB SOLUTIONS'}

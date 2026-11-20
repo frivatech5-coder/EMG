@@ -20,6 +20,7 @@ import {
 import type { NavSection } from '../../types/domain';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
+import { resolveBrandLogoUrl } from '../../lib/validation';
 
 interface SidebarProps {
   activeSection: NavSection;
@@ -112,12 +113,12 @@ export function Sidebar({
           }`}
           title={settings.businessName || 'EMG WEB SOLUTIONS'}
         >
-          <div className="bg-white rounded-md p-1 border border-white/15 shrink-0 flex items-center justify-center shadow-xs">
+          <div className="bg-white rounded-md p-0.5 border border-white/15 shrink-0 flex items-center justify-center shadow-xs">
             <img
-              src={settings.logoUrl || '/assets/aistudio/emglogo0_fdf409c7.png'}
+              src={resolveBrandLogoUrl(settings.logoUrl)}
               alt={settings.businessName || 'EMG WEB SOLUTIONS'}
               referrerPolicy="no-referrer"
-              className="h-6 w-9 object-contain"
+              className="h-7 w-7 object-contain rounded-xs"
             />
           </div>
           {!isCollapsed && (

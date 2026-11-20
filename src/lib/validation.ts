@@ -20,6 +20,16 @@ export const FIELD_LIMITS = {
 
 export const NAIROBI_TIMEZONE = 'Africa/Nairobi';
 
+export const DEFAULT_BRAND_LOGO_URL = '/assets/aistudio/emglogo2_dbb111d9.png';
+
+export function resolveBrandLogoUrl(logoUrl?: string | null): string {
+  const trimmed = (logoUrl || '').trim();
+  if (!trimmed || trimmed === '/assets/aistudio/emglogo0_fdf409c7.png') {
+    return DEFAULT_BRAND_LOGO_URL;
+  }
+  return trimmed;
+}
+
 export function isValidIsoDate(value?: string | null): value is string {
   if (!value || typeof value !== 'string') return false;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;

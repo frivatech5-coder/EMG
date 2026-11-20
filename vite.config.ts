@@ -16,8 +16,7 @@ export default defineConfig(() => {
       VitePWA({
         registerType: 'prompt',
         includeAssets: [
-          'assets/aistudio/emglogo0_fdf409c7.png',
-          'icon.svg',
+          'assets/aistudio/emglogo2_dbb111d9.png',
           'apple-touch-icon.png',
           'pwa-192x192.png',
           'pwa-512x512.png',
@@ -55,12 +54,6 @@ export default defineConfig(() => {
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',
-            },
-            {
-              src: '/icon.svg',
-              sizes: 'any',
-              type: 'image/svg+xml',
-              purpose: 'any',
             },
           ],
         },

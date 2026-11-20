@@ -101,11 +101,11 @@ export function LoginPage() {
       {/* Left Studio Brand Column */}
       <div className="hidden lg:flex lg:col-span-5 xl:col-span-6 flex-col justify-between p-10 xl:p-14 border-r border-white/[0.07] bg-[#0B0C10]">
         <div className="flex items-center gap-3">
-          <div className="bg-white rounded-lg p-1.5 border border-white/15 shrink-0">
+          <div className="bg-white rounded-lg p-1 border border-white/15 shrink-0">
             <img
-              src="/assets/aistudio/emglogo0_fdf409c7.png"
+              src="/assets/aistudio/emglogo2_dbb111d9.png"
               alt="EMG WEB SOLUTIONS — Design, Develop, Grow"
-              className="h-10 w-auto object-contain"
+              className="h-11 w-11 object-contain"
             />
           </div>
           <div>
@@ -172,11 +172,11 @@ export function LoginPage() {
         <div className="max-w-md w-full mx-auto space-y-6">
           {/* Mobile Brand Header */}
           <div className="lg:hidden text-center space-y-3">
-            <div className="inline-flex items-center justify-center bg-white rounded-xl px-4 py-2 border border-white/15 mx-auto">
+            <div className="inline-flex items-center justify-center bg-white rounded-xl p-1.5 border border-white/15 mx-auto">
               <img
-                src="/assets/aistudio/emglogo0_fdf409c7.png"
+                src="/assets/aistudio/emglogo2_dbb111d9.png"
                 alt="EMG WEB SOLUTIONS — Design, Develop, Grow"
-                className="h-16 w-auto object-contain"
+                className="h-20 w-20 object-contain"
               />
             </div>
             <h1 className="font-display text-xl font-semibold text-white tracking-tight">

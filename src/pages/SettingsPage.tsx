@@ -38,7 +38,12 @@ import {
   triggerServerTestFcmPush,
 } from '../lib/messaging';
 import { ENV_VAPID_KEY, firebaseProjectInfo } from '../lib/firebase';
-import { FIELD_LIMITS, isValidUrlOrEmpty } from '../lib/validation';
+import {
+  DEFAULT_BRAND_LOGO_URL,
+  FIELD_LIMITS,
+  isValidUrlOrEmpty,
+  resolveBrandLogoUrl,
+} from '../lib/validation';
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   type AdminRole,
@@ -399,7 +404,7 @@ export function SettingsPage() {
   };
 
   const resolvedVapid = (notifPrefs.vapidPublicKey || ENV_VAPID_KEY || '').trim();
-  const activeLogoPreview = logoUrl.trim() || '/assets/aistudio/emglogo0_fdf409c7.png';
+  const activeLogoPreview = resolveBrandLogoUrl(logoUrl);
 
   if (loading) {
     return <TableSkeleton rows={6} />;
@@ -489,11 +494,11 @@ export function SettingsPage() {
 
           {/* Compact Brand Card Preview */}
           <div className="bg-[#111216] border border-white/[0.08] rounded-xl p-4 space-y-3">
-            <div className="bg-white rounded-lg p-2.5 flex items-center justify-center">
+            <div className="bg-white rounded-lg p-2 flex items-center justify-center">
               <img
                 src={activeLogoPreview}
                 alt={businessName || 'EMG Web Solutions'}
-                className="h-10 w-auto object-contain"
+                className="h-16 w-16 object-contain"
               />
             </div>
             <div className="text-xs space-y-0.5">
@@ -519,11 +524,11 @@ export function SettingsPage() {
               <div className="p-6 space-y-5">
                 {/* Brand Preview Row */}
                 <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl bg-[#09090B] border border-white/[0.06]">
-                  <div className="bg-white rounded-lg px-3 py-2 shrink-0 self-start">
+                  <div className="bg-white rounded-lg p-1.5 shrink-0 self-start">
                     <img
                       src={activeLogoPreview}
                       alt={businessName || 'EMG Web Solutions'}
-                      className="h-11 w-auto object-contain"
+                      className="h-14 w-14 object-contain"
                     />
                   </div>
                   <div className="min-w-0 flex-1 space-y-1">
@@ -557,7 +562,7 @@ export function SettingsPage() {
                       maxLength={500}
                       value={logoUrl}
                       onChange={(e) => setLogoUrl(e.target.value)}
-                      placeholder="/assets/aistudio/emglogo0_fdf409c7.png or https://..."
+                      placeholder={`${DEFAULT_BRAND_LOGO_URL} or https://...`}
                       className={INPUT_CLASS}
                     />
                   </div>
