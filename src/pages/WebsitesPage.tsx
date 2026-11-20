@@ -6,6 +6,12 @@ import {
   Pencil,
   Globe,
   Info,
+  LayoutGrid,
+  List,
+  History,
+  Server,
+  AlertCircle,
+  CheckCircle2,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useToast } from '../components/ui/ToastContext';
@@ -13,6 +19,7 @@ import { SlideOverModal } from '../components/ui/SlideOverModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { StatusIndicator } from '../components/ui/StatusBadge';
 import { EmptyState, ErrorState, TableSkeleton } from '../components/ui/EmptyState';
+import { INPUT_CLASS, PageHeader, SegmentedTabs } from '../components/ui/PageHeader';
 import {
   PaginationBar,
   SortableTh,
@@ -48,6 +55,7 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const { sort, toggleSort } = useTableSort<WebsiteSortKey>('websiteName', 'asc');
   const [formOpen, setFormOpen] = useState(false);
   const [editingWebsite, setEditingWebsite] = useState<Website | null>(null);
@@ -100,6 +108,17 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
     [clients]
   );
 
+  const statusCounts = useMemo(
+    () => ({
+      ALL: websites.length,
+      Live: websites.filter((w) => w.deploymentStatus === 'Live').length,
+      Preview: websites.filter((w) => w.deploymentStatus === 'Preview').length,
+      'In Development': websites.filter((w) => w.deploymentStatus === 'In Development').length,
+      Suspended: websites.filter((w) => w.deploymentStatus === 'Suspended').length,
+    }),
+    [websites]
+  );
+
   const filteredWebsites = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = websites.filter((w) => {
@@ -124,7 +143,7 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
     });
   }, [websites, search, statusFilter, sort]);
 
-  const pagination = useTablePagination(filteredWebsites, 10);
+  const pagination = useTablePagination(filteredWebsites, 12);
 
   const openAddModal = () => {
     const firstClient = activeClients[0];
@@ -227,53 +246,89 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
   }, [historyWebsite, activityLogs]);
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-start gap-3 p-4 rounded-xl bg-blue-500/[0.06] border border-blue-500/20 text-xs text-slate-300 leading-relaxed">
+    <div className="space-y-5 animate-fade-in">
+      <PageHeader
+        title="Website Deployments"
+        description="Track client domains, hosting providers, domain renewals, and live deployment status."
+        meta={
+          !loading && (
+            <span className="font-mono-tabular text-xs text-zinc-400">
+              ({statusCounts.Live} live of {websites.length})
+            </span>
+          )
+        }
+        actions={
+          <>
+            <div className="inline-flex items-center p-0.5 rounded-lg bg-[#111216] border border-white/[0.08]">
+              <button
+                type="button"
+                onClick={() => setViewMode('cards')}
+                aria-label="Card view"
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 min-h-[34px] text-xs font-medium rounded-md transition-colors ${
+                  viewMode === 'cards' ? 'bg-white/[0.1] text-white' : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                Cards
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                aria-label="Table view"
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 min-h-[34px] text-xs font-medium rounded-md transition-colors ${
+                  viewMode === 'table' ? 'bg-white/[0.1] text-white' : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <List className="w-3.5 h-3.5" />
+                Table
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={openAddModal}
+              disabled={activeClients.length === 0}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[38px] text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors whitespace-nowrap shrink-0 disabled:opacity-50"
+            >
+              <Plus className="w-4 h-4" />
+              Add Website
+            </button>
+          </>
+        }
+      />
+
+      <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg bg-[#111216] border border-white/[0.08] text-xs text-zinc-400 leading-relaxed">
         <Info className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
         <p>
-          Deployment statuses track your manual hosting operations across providers (Vercel, cPanel, Cloudflare, etc.). Updating a website status here records the operational state in Firestore and does not modify external hosting servers automatically.
+          Deployment statuses track your manual hosting operations across Vercel, cPanel, and Cloudflare. Updating a status records the state in Firestore without taking external hosting offline automatically.
         </p>
       </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3 flex-1">
-          <div className="relative flex-1 min-w-[220px] max-w-sm">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              aria-label="Search websites"
-              placeholder="Search site name, client, domain, host..."
-              className="w-full pl-9 pr-3 py-2 text-sm bg-[#11131A] border border-white/[0.08] rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
-            />
-          </div>
+      {/* Filters & Search */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <SegmentedTabs
+          value={statusFilter}
+          onChange={setStatusFilter}
+          options={[
+            { id: 'ALL', label: 'All Sites', count: statusCounts.ALL },
+            { id: 'Live', label: 'Live', count: statusCounts.Live },
+            { id: 'Preview', label: 'Preview', count: statusCounts.Preview },
+            { id: 'In Development', label: 'Building', count: statusCounts['In Development'] },
+            { id: 'Suspended', label: 'Suspended', count: statusCounts.Suspended },
+          ]}
+        />
 
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            aria-label="Filter by deployment status"
-            className="px-3 py-2 text-sm bg-[#11131A] border border-white/[0.08] rounded-lg text-slate-200 focus:outline-none focus:border-blue-500"
-          >
-            <option value="ALL">All Deployment Statuses</option>
-            {WEBSITE_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
+        <div className="relative flex-1 min-w-[220px] lg:max-w-xs">
+          <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search websites"
+            placeholder="Search site, client, domain, host..."
+            className="w-full pl-9 pr-3 py-2 min-h-[38px] text-xs bg-[#111216] border border-white/[0.08] rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-blue-500"
+          />
         </div>
-
-        <button
-          type="button"
-          onClick={openAddModal}
-          disabled={activeClients.length === 0}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors whitespace-nowrap shrink-0 disabled:opacity-50"
-        >
-          <Plus className="w-4 h-4" />
-          Add Website
-        </button>
       </div>
 
       {activeClients.length === 0 && !loading && (
@@ -298,99 +353,173 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
           actionLabel={websites.length === 0 && activeClients.length > 0 ? 'Add Website' : undefined}
           onAction={websites.length === 0 && activeClients.length > 0 ? openAddModal : undefined}
         />
-      ) : (
-        <div className="bg-[#11131A] border border-white/[0.08] rounded-xl overflow-hidden">
-          {/* Mobile Cards */}
-          <div className="md:hidden divide-y divide-white/[0.06]">
+      ) : viewMode === 'cards' ? (
+        /* Vercel-style Project Deployment Cards Grid */
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {pagination.paginatedItems.map((site) => (
-              <div key={site.id} className="p-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-medium text-white truncate">{site.websiteName}</p>
-                    <p className="font-mono-tabular text-xs text-slate-400 mt-0.5">
-                      {site.websiteCode} · {site.businessName}
-                    </p>
+              <div
+                key={site.id}
+                className="bg-[#111216] border border-white/[0.08] hover:border-white/[0.15] rounded-xl flex flex-col justify-between overflow-hidden transition-colors"
+              >
+                <div className="p-5 space-y-4">
+                  {/* Top Header */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-lg bg-[#09090B] border border-white/[0.08] flex items-center justify-center shrink-0">
+                        <Globe className="w-4 h-4 text-blue-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="font-display text-sm font-semibold text-white truncate">
+                          {site.websiteName}
+                        </h3>
+                        <p className="text-xs text-zinc-400 truncate mt-0.5">
+                          {site.businessName}
+                        </p>
+                      </div>
+                    </div>
+                    <StatusIndicator status={site.deploymentStatus} />
                   </div>
-                  <StatusIndicator status={site.deploymentStatus} />
+
+                  {/* Domain & Host Meta */}
+                  <div className="px-3.5 py-2.5 rounded-lg bg-[#0D0E12] border border-white/[0.06] space-y-1.5 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-zinc-500">Domain</span>
+                      {site.liveUrl ? (
+                        <a
+                          href={site.liveUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-mono text-blue-400 hover:text-blue-300 truncate inline-flex items-center gap-1"
+                        >
+                          <span className="truncate">{site.domain || site.liveUrl}</span>
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                      ) : (
+                        <span className="font-mono text-zinc-300 truncate">
+                          {site.domain || 'Not assigned'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-zinc-500">Provider</span>
+                      <span className="text-zinc-200 inline-flex items-center gap-1">
+                        <Server className="w-3 h-3 text-zinc-500" />
+                        {site.hostingProvider}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-zinc-500">Renewal</span>
+                      <span className="font-mono-tabular text-zinc-300">
+                        {formatDisplayDate(site.renewalDate)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Build Integration Note */}
+                  {site.deploymentIntegrationStatus === 'failed' ? (
+                    <div className="flex items-start gap-2 text-xs text-red-400">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      <span className="truncate">
+                        {site.deploymentErrorMessage || 'Build integration failed'}
+                      </span>
+                    </div>
+                  ) : site.deploymentIntegrationStatus === 'healthy' ? (
+                    <div className="flex items-center gap-2 text-xs text-emerald-400">
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      <span>Verified build healthy</span>
+                    </div>
+                  ) : null}
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <p className="text-slate-500">Domain &amp; Host</p>
-                    <p className="text-slate-200 truncate">{site.domain || '—'}</p>
-                    <p className="text-slate-400">{site.hostingProvider}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-slate-500">Renewal Date</p>
-                    <p className="font-mono-tabular text-slate-200">
-                      {formatDisplayDate(site.renewalDate)}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.06]">
-                  {site.liveUrl && (
-                    <a
-                      href={site.liveUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium text-blue-300 bg-white/[0.04] rounded-lg min-h-[38px]"
+
+                {/* Card Footer */}
+                <div className="px-4 py-3 border-t border-white/[0.07] bg-[#0D0E12] flex items-center justify-between gap-2">
+                  <span className="font-mono text-[11px] text-zinc-500">{site.websiteCode}</span>
+                  <div className="flex items-center gap-1.5">
+                    {site.liveUrl && (
+                      <a
+                        href={site.liveUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-zinc-300 hover:text-white hover:bg-white/[0.06] rounded-md transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        Visit
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setHistoryWebsite(site)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-zinc-300 hover:text-white hover:bg-white/[0.06] rounded-md transition-colors"
                     >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      Visit
-                    </a>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setHistoryWebsite(site)}
-                    className="px-3 py-2 text-xs font-medium text-slate-200 bg-white/[0.04] rounded-lg min-h-[38px]"
-                  >
-                    History
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openEditModal(site)}
-                    className="px-3 py-2 text-xs font-medium text-blue-300 bg-blue-600/15 rounded-lg min-h-[38px]"
-                  >
-                    Edit
-                  </button>
+                      <History className="w-3.5 h-3.5" />
+                      Logs
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(site)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-400 hover:text-blue-300 hover:bg-blue-600/10 rounded-md transition-colors"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      Edit
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Desktop Table */}
-          <div className="hidden md:block overflow-x-auto">
+          <div className="bg-[#111216] border border-white/[0.08] rounded-xl overflow-hidden">
+            <PaginationBar
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              totalItems={pagination.totalItems}
+              pageSize={pagination.pageSize}
+              onPageChange={pagination.setPage}
+              onPageSizeChange={pagination.setPageSize}
+            />
+          </div>
+        </div>
+      ) : (
+        /* Table View */
+        <div className="bg-[#111216] border border-white/[0.08] rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-white/[0.08] text-xs font-medium text-slate-400">
+                <tr className="border-b border-white/[0.07] bg-[#0D0E12]">
                   <SortableTh label="Website" sortKey="websiteName" sort={sort} onSort={toggleSort} />
                   <SortableTh label="Client" sortKey="businessName" sort={sort} onSort={toggleSort} />
-                  <th className="py-3.5 px-4">Domain & Host</th>
+                  <th className="py-3 px-4 text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                    Domain & Host
+                  </th>
                   <SortableTh label="Renewal" sortKey="renewalDate" sort={sort} onSort={toggleSort} />
                   <SortableTh label="Status" sortKey="deploymentStatus" sort={sort} onSort={toggleSort} />
-                  <th className="py-3.5 px-4 text-right">Actions</th>
+                  <th className="py-3 px-4 text-right text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.06] text-sm">
                 {pagination.paginatedItems.map((site) => (
-                  <tr key={site.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="py-3.5 px-4">
+                  <tr key={site.id} className="hover:bg-white/[0.025] transition-colors">
+                    <td className="py-3 px-4">
                       <p className="font-medium text-white">{site.websiteName}</p>
-                      <p className="font-mono-tabular text-xs text-slate-400 mt-0.5">
+                      <p className="font-mono-tabular text-xs text-zinc-400 mt-0.5">
                         {site.websiteCode}
                       </p>
                     </td>
-                    <td className="py-3.5 px-4 text-slate-200">{site.businessName}</td>
-                    <td className="py-3.5 px-4">
-                      <p className="text-slate-200">{site.domain || '—'}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{site.hostingProvider}</p>
+                    <td className="py-3 px-4 text-zinc-200">{site.businessName}</td>
+                    <td className="py-3 px-4">
+                      <p className="text-zinc-200 font-mono text-xs">{site.domain || '—'}</p>
+                      <p className="text-xs text-zinc-500 mt-0.5">{site.hostingProvider}</p>
                     </td>
-                    <td className="py-3.5 px-4 font-mono-tabular text-xs text-slate-300">
+                    <td className="py-3 px-4 font-mono-tabular text-xs text-zinc-300">
                       {formatDisplayDate(site.renewalDate)}
                     </td>
-                    <td className="py-3.5 px-4">
+                    <td className="py-3 px-4">
                       <StatusIndicator status={site.deploymentStatus} />
                     </td>
-                    <td className="py-3.5 px-4 text-right">
+                    <td className="py-3 px-4 text-right">
                       <div className="inline-flex items-center justify-end gap-1">
                         {site.liveUrl && (
                           <a
@@ -399,7 +528,7 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
                             rel="noreferrer"
                             title="Open Live Website"
                             aria-label={`Open live site for ${site.websiteName}`}
-                            className="p-2 text-slate-400 hover:text-blue-400 hover:bg-white/[0.06] rounded-lg transition-colors"
+                            className="p-2 text-zinc-400 hover:text-blue-400 hover:bg-white/[0.06] rounded-md transition-colors"
                           >
                             <ExternalLink className="w-4 h-4" />
                           </a>
@@ -407,16 +536,16 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
                         <button
                           type="button"
                           onClick={() => setHistoryWebsite(site)}
-                          className="px-2.5 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-white/[0.06] rounded-lg transition-colors"
+                          className="px-2.5 py-1.5 text-xs text-zinc-300 hover:text-white hover:bg-white/[0.06] rounded-md transition-colors"
                         >
-                          History
+                          Logs
                         </button>
                         <button
                           type="button"
                           onClick={() => openEditModal(site)}
                           title="Edit Website"
                           aria-label={`Edit ${site.websiteName}`}
-                          className="p-2 text-slate-400 hover:text-blue-400 hover:bg-white/[0.06] rounded-lg transition-colors"
+                          className="p-2 text-zinc-400 hover:text-blue-400 hover:bg-white/[0.06] rounded-md transition-colors"
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
@@ -452,12 +581,12 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
       >
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">Client *</label>
+            <label className="block text-xs font-medium text-zinc-300 mb-1.5">Client *</label>
             <select
               required
               value={formState.clientId}
               onChange={(e) => handleClientSelect(e.target.value)}
-              className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+              className={INPUT_CLASS}
             >
               <option value="">Select client...</option>
               {clients.map((c) => (
@@ -469,7 +598,7 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">
+            <label className="block text-xs font-medium text-zinc-300 mb-1.5">
               Website Name *
             </label>
             <input
@@ -479,25 +608,25 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
               value={formState.websiteName}
               onChange={(e) => setFormState({ ...formState, websiteName: e.target.value })}
               placeholder="e.g. Savanna Hardware Corporate Portal"
-              className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+              className={INPUT_CLASS}
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Domain</label>
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">Domain</label>
               <input
                 type="text"
                 maxLength={FIELD_LIMITS.domainMax}
                 value={formState.domain || ''}
                 onChange={(e) => setFormState({ ...formState, domain: e.target.value })}
                 placeholder="savannahardware.co.ke"
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Hosting Provider *
               </label>
               <input
@@ -507,12 +636,12 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
                 value={formState.hostingProvider}
                 onChange={(e) => setFormState({ ...formState, hostingProvider: e.target.value })}
                 placeholder="Vercel, Truehost, Namecheap..."
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Live Website URL
               </label>
               <input
@@ -521,12 +650,12 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
                 value={formState.liveUrl || ''}
                 onChange={(e) => setFormState({ ...formState, liveUrl: e.target.value })}
                 placeholder="https://savannahardware.co.ke"
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Deployment Status *
               </label>
               <select
@@ -537,7 +666,7 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
                     deploymentStatus: e.target.value as WebsiteDeploymentStatus,
                   })
                 }
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               >
                 {WEBSITE_STATUSES.map((s) => (
                   <option key={s} value={s}>
@@ -548,19 +677,19 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Domain / Hosting Renewal Date
               </label>
               <input
                 type="date"
                 value={formState.renewalDate || ''}
                 onChange={(e) => setFormState({ ...formState, renewalDate: e.target.value })}
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Deployment Integration Status
               </label>
               <select
@@ -571,7 +700,7 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
                     deploymentIntegrationStatus: e.target.value as 'none' | 'healthy' | 'failed',
                   })
                 }
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               >
                 <option value="none">No Build Webhook Connected</option>
                 <option value="healthy">Verified Build Healthy</option>
@@ -581,7 +710,7 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
 
             {formState.deploymentIntegrationStatus === 'failed' && (
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                   Deployment Error Summary
                 </label>
                 <input
@@ -592,14 +721,14 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
                     setFormState({ ...formState, deploymentErrorMessage: e.target.value })
                   }
                   placeholder="e.g. Vercel build failed on main branch"
-                  className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-red-500/30 rounded-lg text-white focus:outline-none focus:border-red-500"
+                  className="w-full px-3.5 py-2 min-h-[40px] text-sm bg-[#09090B] border border-red-500/30 rounded-lg text-white focus:outline-none focus:border-red-500"
                 />
               </div>
             )}
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">
+            <label className="block text-xs font-medium text-zinc-300 mb-1.5">
               Technical Notes
             </label>
             <textarea
@@ -608,7 +737,7 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
               value={formState.technicalNotes || ''}
               onChange={(e) => setFormState({ ...formState, technicalNotes: e.target.value })}
               placeholder="DNS registrar, SSL expiry, deployment branch, repository link..."
-              className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+              className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/[0.1] rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-blue-500"
             />
           </div>
 
@@ -616,7 +745,7 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
             <button
               type="button"
               onClick={() => setFormOpen(false)}
-              className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-white/[0.05] rounded-lg"
+              className="px-4 py-2 text-sm font-medium text-zinc-300 hover:text-white bg-white/[0.05] rounded-lg"
             >
               Cancel
             </button>
@@ -644,23 +773,23 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
       >
         {historyWebsite && (
           <div className="space-y-5">
-            <div className="border border-white/[0.08] rounded-lg p-4 space-y-2 text-sm">
+            <div className="border border-white/[0.08] bg-[#0D0E12] rounded-lg p-4 space-y-2.5 text-sm">
               <div className="flex justify-between">
-                <span className="text-slate-400">Domain</span>
-                <span className="text-white">{historyWebsite.domain || '—'}</span>
+                <span className="text-zinc-400">Domain</span>
+                <span className="text-white font-mono text-xs">{historyWebsite.domain || '—'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Hosting</span>
+                <span className="text-zinc-400">Hosting</span>
                 <span className="text-white">{historyWebsite.hostingProvider}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Status</span>
+                <span className="text-zinc-400">Status</span>
                 <StatusIndicator status={historyWebsite.deploymentStatus} />
               </div>
               {historyWebsite.technicalNotes && (
-                <div className="pt-2 border-t border-white/[0.06]">
-                  <p className="text-xs text-slate-400 mb-1">Technical Notes</p>
-                  <p className="text-xs text-slate-200 whitespace-pre-wrap">
+                <div className="pt-2.5 border-t border-white/[0.06]">
+                  <p className="text-xs text-zinc-400 mb-1">Technical Notes</p>
+                  <p className="text-xs text-zinc-200 whitespace-pre-wrap leading-relaxed">
                     {historyWebsite.technicalNotes}
                   </p>
                 </div>
@@ -668,15 +797,17 @@ export function WebsitesPage({ focusedRecordId, onClearFocusedRecord }: Websites
             </div>
 
             <div>
-              <h3 className="text-sm font-semibold text-white mb-3">Audit History</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-3">
+                Audit History
+              </h3>
               {siteLogs.length === 0 ? (
-                <p className="text-xs text-slate-400">No update logs recorded yet.</p>
+                <p className="text-xs text-zinc-500">No update logs recorded yet.</p>
               ) : (
-                <div className="divide-y divide-white/[0.06] border border-white/[0.08] rounded-lg">
+                <div className="divide-y divide-white/[0.06] border border-white/[0.08] rounded-lg bg-[#0D0E12]">
                   {siteLogs.map((log) => (
                     <div key={log.id} className="p-3 text-xs space-y-1">
                       <p className="text-white font-medium">{log.summary}</p>
-                      <p className="text-slate-400">
+                      <p className="text-zinc-400">
                         {log.actionType} · {log.adminEmail || log.adminId}
                       </p>
                     </div>

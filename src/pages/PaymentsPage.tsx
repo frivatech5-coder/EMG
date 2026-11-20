@@ -5,6 +5,8 @@ import {
   CreditCard,
   ShieldCheck,
   RotateCcw,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useToast } from '../components/ui/ToastContext';
@@ -17,6 +19,12 @@ import {
   SummaryStripSkeleton,
   TableSkeleton,
 } from '../components/ui/EmptyState';
+import {
+  INPUT_CLASS,
+  PageHeader,
+  SELECT_CLASS,
+  SegmentedTabs,
+} from '../components/ui/PageHeader';
 import {
   PaginationBar,
   SortableTh,
@@ -60,6 +68,7 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const { sort, toggleSort } = useTableSort<PaymentSortKey>('paymentDate', 'desc');
   const [formOpen, setFormOpen] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [statusTarget, setStatusTarget] = useState<{
     payment: Payment;
     nextStatus: PaymentStatus;
@@ -93,6 +102,43 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
     notes: '',
   });
 
+  const paymentSummary = useMemo(() => {
+    let paidTotal = 0;
+    let mpesaTotal = 0;
+    let otherPaidTotal = 0;
+    let pendingTotal = 0;
+    let paidCount = 0;
+    let pendingCount = 0;
+    let refundedCount = 0;
+    let failedCount = 0;
+    for (const p of payments) {
+      const amt = Number(p.amount) || 0;
+      if (p.status === 'Paid') {
+        paidTotal += amt;
+        paidCount += 1;
+        if (p.method === 'M-Pesa') mpesaTotal += amt;
+        else otherPaidTotal += amt;
+      } else if (p.status === 'Pending') {
+        pendingTotal += amt;
+        pendingCount += 1;
+      } else if (p.status === 'Refunded') {
+        refundedCount += 1;
+      } else if (p.status === 'Failed') {
+        failedCount += 1;
+      }
+    }
+    return {
+      paidTotal,
+      mpesaTotal,
+      otherPaidTotal,
+      pendingTotal,
+      paidCount,
+      pendingCount,
+      refundedCount,
+      failedCount,
+    };
+  }, [payments]);
+
   const filteredPayments = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = payments.filter((p) => {
@@ -124,19 +170,6 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
       return eff === 'Overdue' || eff === 'Pending';
     });
   }, [subscriptions, today]);
-
-  const paymentSummary = useMemo(() => {
-    const paidTotal = payments
-      .filter((p) => p.status === 'Paid')
-      .reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
-    const mpesaTotal = payments
-      .filter((p) => p.status === 'Paid' && p.method === 'M-Pesa')
-      .reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
-    const pendingTotal = payments
-      .filter((p) => p.status === 'Pending')
-      .reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
-    return { paidTotal, mpesaTotal, pendingTotal };
-  }, [payments]);
 
   const openRecordModal = (prefill?: {
     clientId: string;
@@ -236,35 +269,58 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
     }
   };
 
-  return (
-    <div className="space-y-5">
-      {/* Honest M-Pesa Daraja Architecture Banner */}
-      <div className="flex items-start gap-3 p-4 rounded-xl bg-[#11131A] border border-blue-500/20 text-xs text-slate-300 leading-relaxed">
-        <ShieldCheck className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
-        <p>
-          <span className="font-semibold text-white">Manual Verification Mode Active:</span> Every payment must be verified by an EMG administrator and uses atomic duplicate-reference protection. M-Pesa Daraja STK Push & server-side callback handlers are prepared in Firebase Cloud Functions (<code className="font-mono text-blue-300">mpesaDarajaCallback</code>) and remain disabled until Safaricom Daraja credentials are configured in Firebase Secret Manager.
-        </p>
-      </div>
+  const handleCopyRef = (id: string, ref: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      void navigator.clipboard.writeText(ref).then(() => {
+        setCopiedId(id);
+        setTimeout(() => setCopiedId((prev) => (prev === id ? null : prev)), 1500);
+      });
+    }
+  };
 
-      {/* Summary Strip */}
+  return (
+    <div className="space-y-5 animate-fade-in">
+      <PageHeader
+        title="Payments Ledger"
+        description="Verify incoming M-Pesa, bank, cash, and PayPal collections with duplicate-reference protection."
+        actions={
+          <button
+            type="button"
+            onClick={() => openRecordModal()}
+            disabled={clients.length === 0}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[38px] text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors whitespace-nowrap shrink-0 disabled:opacity-50"
+          >
+            <Plus className="w-4 h-4" />
+            Record Payment
+          </button>
+        }
+      />
+
+      {/* Unified Financial Summary Bar */}
       {loading ? (
-        <SummaryStripSkeleton cards={3} />
+        <SummaryStripSkeleton cards={4} />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-[#11131A] border border-white/[0.08] rounded-xl p-4">
-            <p className="text-xs text-slate-400">Total Verified Payments</p>
+        <div className="bg-[#111216] border border-white/[0.08] rounded-xl overflow-hidden grid grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-white/[0.07]">
+          <div className="p-4 sm:p-5">
+            <p className="text-xs text-zinc-400">Verified Collections</p>
             <p className="mt-1 font-mono-tabular text-xl font-semibold text-white">
               {formatKES(paymentSummary.paidTotal, currency)}
             </p>
           </div>
-          <div className="bg-[#11131A] border border-white/[0.08] rounded-xl p-4">
-            <p className="text-xs text-slate-400">Verified M-Pesa Total</p>
+          <div className="p-4 sm:p-5">
+            <p className="text-xs text-zinc-400">M-Pesa Verified</p>
             <p className="mt-1 font-mono-tabular text-xl font-semibold text-emerald-400">
               {formatKES(paymentSummary.mpesaTotal, currency)}
             </p>
           </div>
-          <div className="bg-[#11131A] border border-white/[0.08] rounded-xl p-4">
-            <p className="text-xs text-slate-400">Pending Verification</p>
+          <div className="p-4 sm:p-5">
+            <p className="text-xs text-zinc-400">Bank / PayPal / Cash</p>
+            <p className="mt-1 font-mono-tabular text-xl font-semibold text-blue-400">
+              {formatKES(paymentSummary.otherPaidTotal, currency)}
+            </p>
+          </div>
+          <div className="p-4 sm:p-5">
+            <p className="text-xs text-zinc-400">Pending Verification</p>
             <p className="mt-1 font-mono-tabular text-xl font-semibold text-amber-400">
               {formatKES(paymentSummary.pendingTotal, currency)}
             </p>
@@ -272,23 +328,31 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
         </div>
       )}
 
+      {/* Honest M-Pesa Daraja Architecture Note */}
+      <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg bg-[#111216] border border-white/[0.08] text-xs text-zinc-400 leading-relaxed">
+        <ShieldCheck className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+        <p>
+          <span className="font-semibold text-zinc-200">Manual Verification Mode:</span> Every entry uses atomic duplicate-reference protection. M-Pesa Daraja webhook handlers (<code className="font-mono text-blue-400">mpesaDarajaCallback</code>) remain staged until Safaricom credentials are provisioned.
+        </p>
+      </div>
+
       {/* Unpaid Subscriptions Quick Action Strip */}
       {!loading && unpaidSubscriptions.length > 0 && (
-        <div className="bg-[#11131A] border border-amber-500/25 rounded-xl p-4 space-y-3">
+        <div className="bg-[#111216] border border-amber-500/25 rounded-xl p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-semibold text-amber-300">
-              Unpaid & Overdue Subscriptions ({unpaidSubscriptions.length})
+              Quick Settle: Overdue &amp; Due Subscriptions ({unpaidSubscriptions.length})
             </h3>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
             {unpaidSubscriptions.slice(0, 6).map((sub) => (
               <div
                 key={sub.id}
-                className="flex items-center justify-between gap-3 p-3 rounded-lg bg-[#09090B] border border-white/[0.06]"
+                className="flex items-center justify-between gap-3 p-3 rounded-lg bg-[#09090B] border border-white/[0.07]"
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{sub.clientName}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-xs font-semibold text-white truncate">{sub.clientName}</p>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
                     {sub.packageName} · Due {formatDisplayDate(sub.nextPaymentDate)}
                   </p>
                 </div>
@@ -301,7 +365,7 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
                       amount: sub.monthlyAmount,
                     })
                   }
-                  className="px-3 py-2 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-md whitespace-nowrap shrink-0 min-h-[36px]"
+                  className="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-md whitespace-nowrap shrink-0 min-h-[34px]"
                 >
                   Log {formatKES(sub.monthlyAmount, currency)}
                 </button>
@@ -312,17 +376,29 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
       )}
 
       {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3 flex-1">
-          <div className="relative flex-1 min-w-[220px] max-w-sm">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+        <SegmentedTabs
+          value={statusFilter}
+          onChange={setStatusFilter}
+          options={[
+            { id: 'ALL', label: 'All', count: payments.length },
+            { id: 'Paid', label: 'Paid', count: paymentSummary.paidCount },
+            { id: 'Pending', label: 'Pending', count: paymentSummary.pendingCount },
+            { id: 'Refunded', label: 'Refunded', count: paymentSummary.refundedCount },
+            { id: 'Failed', label: 'Failed', count: paymentSummary.failedCount },
+          ]}
+        />
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="relative flex-1 min-w-[200px] sm:w-64">
+            <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               aria-label="Search payments"
-              placeholder="Search client, transaction ref, payment ID..."
-              className="w-full pl-9 pr-3 py-2 text-sm bg-[#11131A] border border-white/[0.08] rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+              placeholder="Search client, transaction ref, ID..."
+              className="w-full pl-9 pr-3 py-2 min-h-[38px] text-xs bg-[#111216] border border-white/[0.08] rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-blue-500"
             />
           </div>
 
@@ -330,7 +406,7 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
             value={methodFilter}
             onChange={(e) => setMethodFilter(e.target.value)}
             aria-label="Filter by payment method"
-            className="px-3 py-2 text-sm bg-[#11131A] border border-white/[0.08] rounded-lg text-slate-200 focus:outline-none focus:border-blue-500"
+            className={`${SELECT_CLASS} !min-h-[38px] !py-1.5 text-xs`}
           >
             <option value="ALL">All Methods</option>
             {PAYMENT_METHODS.map((m) => (
@@ -339,31 +415,7 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
               </option>
             ))}
           </select>
-
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            aria-label="Filter by payment status"
-            className="px-3 py-2 text-sm bg-[#11131A] border border-white/[0.08] rounded-lg text-slate-200 focus:outline-none focus:border-blue-500"
-          >
-            <option value="ALL">All Statuses</option>
-            {PAYMENT_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
         </div>
-
-        <button
-          type="button"
-          onClick={() => openRecordModal()}
-          disabled={clients.length === 0}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors whitespace-nowrap shrink-0 disabled:opacity-50"
-        >
-          <Plus className="w-4 h-4" />
-          Record Manual Payment
-        </button>
       </div>
 
       {loading ? (
@@ -383,7 +435,7 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
           onAction={payments.length === 0 && clients.length > 0 ? () => openRecordModal() : undefined}
         />
       ) : (
-        <div className="bg-[#11131A] border border-white/[0.08] rounded-xl overflow-hidden">
+        <div className="bg-[#111216] border border-white/[0.08] rounded-xl overflow-hidden">
           {/* Mobile Cards */}
           <div className="md:hidden divide-y divide-white/[0.06]">
             {pagination.paginatedItems.map((payment) => (
@@ -391,14 +443,14 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-medium text-white truncate">{payment.clientName}</p>
-                    <p className="font-mono-tabular text-xs text-slate-400 mt-0.5">
+                    <p className="font-mono-tabular text-xs text-zinc-400 mt-0.5">
                       {payment.transactionReference} · {payment.paymentCode}
                     </p>
                   </div>
                   <StatusIndicator status={payment.status} />
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">
+                  <span className="text-zinc-400">
                     {payment.method} · {formatDisplayDate(payment.paymentDate)}
                   </span>
                   <span className="font-mono-tabular text-sm font-semibold text-white">
@@ -431,51 +483,68 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
             ))}
           </div>
 
-          {/* Desktop Table */}
+          {/* Desktop High-Density Table */}
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-white/[0.08] text-xs font-medium text-slate-400">
-                  <th className="py-3.5 px-4">Reference & ID</th>
+                <tr className="border-b border-white/[0.07] bg-[#0D0E12]">
+                  <th className="py-3 px-4 text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                    Reference & ID
+                  </th>
                   <SortableTh label="Client" sortKey="clientName" sort={sort} onSort={toggleSort} />
                   <SortableTh label="Method" sortKey="method" sort={sort} onSort={toggleSort} />
                   <SortableTh label="Date" sortKey="paymentDate" sort={sort} onSort={toggleSort} />
                   <SortableTh label="Amount" sortKey="amount" sort={sort} onSort={toggleSort} align="right" />
                   <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
-                  <th className="py-3.5 px-4 text-right">Actions</th>
+                  <th className="py-3 px-4 text-right text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.06] text-sm">
                 {pagination.paginatedItems.map((payment) => (
-                  <tr key={payment.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="py-3.5 px-4">
-                      <p className="font-mono-tabular font-medium text-white">
-                        {payment.transactionReference}
-                      </p>
-                      <p className="font-mono-tabular text-xs text-slate-400 mt-0.5">
+                  <tr key={payment.id} className="hover:bg-white/[0.025] transition-colors">
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono-tabular font-medium text-white">
+                          {payment.transactionReference}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyRef(payment.id, payment.transactionReference)}
+                          title="Copy reference"
+                          aria-label={`Copy reference ${payment.transactionReference}`}
+                          className="p-1 text-zinc-500 hover:text-white rounded transition-colors"
+                        >
+                          {copiedId === payment.id ? (
+                            <Check className="w-3 h-3 text-emerald-400" />
+                          ) : (
+                            <Copy className="w-3 h-3" />
+                          )}
+                        </button>
+                      </div>
+                      <p className="font-mono-tabular text-xs text-zinc-500 mt-0.5">
                         {payment.paymentCode}
                       </p>
                     </td>
-                    <td className="py-3.5 px-4 text-slate-200">{payment.clientName}</td>
-                    <td className="py-3.5 px-4 text-slate-300">{payment.method}</td>
-                    <td className="py-3.5 px-4 font-mono-tabular text-xs text-slate-300">
+                    <td className="py-3 px-4 text-zinc-200">{payment.clientName}</td>
+                    <td className="py-3 px-4 text-zinc-300">{payment.method}</td>
+                    <td className="py-3 px-4 font-mono-tabular text-xs text-zinc-300">
                       {formatDisplayDate(payment.paymentDate)}
                     </td>
-                    <td className="py-3.5 px-4 text-right font-mono-tabular font-semibold text-white">
+                    <td className="py-3 px-4 text-right font-mono-tabular font-semibold text-white">
                       {formatKES(payment.amount, currency)}
                     </td>
-                    <td className="py-3.5 px-4">
+                    <td className="py-3 px-4">
                       <StatusIndicator status={payment.status} />
                     </td>
-                    <td className="py-3.5 px-4 text-right">
+                    <td className="py-3 px-4 text-right">
                       {payment.status === 'Paid' ? (
                         <button
                           type="button"
-                          onClick={() =>
-                            setStatusTarget({ payment, nextStatus: 'Refunded' })
-                          }
+                          onClick={() => setStatusTarget({ payment, nextStatus: 'Refunded' })}
                           title="Mark Refunded"
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-400 hover:text-amber-400 hover:bg-white/[0.06] rounded-lg transition-colors"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-zinc-400 hover:text-amber-400 hover:bg-white/[0.06] rounded-md transition-colors"
                         >
                           <RotateCcw className="w-3.5 h-3.5" />
                           Refund
@@ -484,12 +553,12 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
                         <button
                           type="button"
                           onClick={() => setStatusTarget({ payment, nextStatus: 'Paid' })}
-                          className="px-2.5 py-1.5 text-xs font-medium text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                          className="px-2.5 py-1.5 text-xs font-medium text-emerald-400 hover:bg-emerald-500/10 rounded-md transition-colors"
                         >
                           Mark Paid
                         </button>
                       ) : (
-                        <span className="text-xs text-slate-500">—</span>
+                        <span className="text-xs text-zinc-600">—</span>
                       )}
                     </td>
                   </tr>
@@ -518,7 +587,7 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
       >
         <form onSubmit={(e) => void handleSave(e)} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">Client *</label>
+            <label className="block text-xs font-medium text-zinc-300 mb-1.5">Client *</label>
             <select
               required
               value={formState.clientId}
@@ -533,7 +602,7 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
                   amount: found?.monthlyAmount || formState.amount,
                 });
               }}
-              className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+              className={INPUT_CLASS}
             >
               <option value="">Select client...</option>
               {clients.map((c) => (
@@ -546,7 +615,7 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Link Subscription (Optional)
               </label>
               <select
@@ -559,7 +628,7 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
                     amount: sub ? sub.monthlyAmount : formState.amount,
                   });
                 }}
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               >
                 <option value="">None / General Payment</option>
                 {clientSubscriptions.map((s) => (
@@ -571,7 +640,7 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Link Unpaid Invoice (Optional)
               </label>
               <select
@@ -584,7 +653,7 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
                     amount: inv ? inv.amount : formState.amount,
                   });
                 }}
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               >
                 <option value="">None</option>
                 {clientUnpaidInvoices.map((inv) => (
@@ -596,7 +665,7 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Payment Method *
               </label>
               <select
@@ -604,7 +673,7 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
                 onChange={(e) =>
                   setFormState({ ...formState, method: e.target.value as PaymentMethod })
                 }
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               >
                 {PAYMENT_METHODS.map((m) => (
                   <option key={m} value={m}>
@@ -615,7 +684,7 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Amount ({currency}) *
               </label>
               <input
@@ -628,12 +697,12 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
                 onChange={(e) =>
                   setFormState({ ...formState, amount: Number(e.target.value) || 0 })
                 }
-                className="w-full px-3.5 py-2 text-sm font-mono-tabular bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={`${INPUT_CLASS} font-mono-tabular`}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Transaction Reference *
               </label>
               <input
@@ -645,12 +714,12 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
                   setFormState({ ...formState, transactionReference: e.target.value })
                 }
                 placeholder="e.g. SLK8A92B1C"
-                className="w-full px-3.5 py-2 text-sm font-mono bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={`${INPUT_CLASS} font-mono`}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Payment Date *
               </label>
               <input
@@ -658,12 +727,12 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
                 required
                 value={formState.paymentDate}
                 onChange={(e) => setFormState({ ...formState, paymentDate: e.target.value })}
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Verification Status *
               </label>
               <select
@@ -671,7 +740,7 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
                 onChange={(e) =>
                   setFormState({ ...formState, status: e.target.value as PaymentStatus })
                 }
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               >
                 {PAYMENT_STATUSES.map((s) => (
                   <option key={s} value={s}>
@@ -679,21 +748,21 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
                   </option>
                 ))}
               </select>
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-[11px] text-zinc-400 mt-1">
                 Only mark Paid after confirming the transaction in M-Pesa/Bank statement. Linked subscriptions advance by 1 month automatically when Paid.
               </p>
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">Notes</label>
+            <label className="block text-xs font-medium text-zinc-300 mb-1.5">Notes</label>
             <textarea
               rows={2}
               maxLength={FIELD_LIMITS.paymentNotesMax}
               value={formState.notes || ''}
               onChange={(e) => setFormState({ ...formState, notes: e.target.value })}
               placeholder="Sender phone number, bank slip details, or remarks..."
-              className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+              className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/[0.1] rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-blue-500"
             />
           </div>
 
@@ -701,7 +770,7 @@ export function PaymentsPage({ focusedRecordId, onClearFocusedRecord }: Payments
             <button
               type="button"
               onClick={() => setFormOpen(false)}
-              className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-white/[0.05] rounded-lg"
+              className="px-4 py-2 text-sm font-medium text-zinc-300 hover:text-white bg-white/[0.05] rounded-lg"
             >
               Cancel
             </button>

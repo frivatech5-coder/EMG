@@ -16,6 +16,12 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { StatusIndicator } from '../components/ui/StatusBadge';
 import { EmptyState, ErrorState, TableSkeleton } from '../components/ui/EmptyState';
 import {
+  INPUT_CLASS,
+  PageHeader,
+  SELECT_CLASS,
+  SegmentedTabs,
+} from '../components/ui/PageHeader';
+import {
   PaginationBar,
   SortableTh,
   useTablePagination,
@@ -95,6 +101,18 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
     registeredAt: todayIso(),
     notes: '',
   });
+
+  const statusCounts = useMemo(() => {
+    const visible = clients.filter((c) => showArchived || !c.archived);
+    return {
+      ALL: visible.length,
+      Active: visible.filter((c) => c.status === 'Active').length,
+      Prospect: visible.filter((c) => c.status === 'Prospect').length,
+      'Demo Presented': visible.filter((c) => c.status === 'Demo Presented').length,
+      Inactive: visible.filter((c) => c.status === 'Inactive').length,
+      Cancelled: visible.filter((c) => c.status === 'Cancelled').length,
+    };
+  }, [clients, showArchived]);
 
   const filteredClients = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -269,42 +287,71 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
     [viewingClient, invoices]
   );
 
+  const profilePaidTotal = useMemo(
+    () =>
+      profilePayments
+        .filter((p) => p.status === 'Paid')
+        .reduce((acc, p) => acc + (Number(p.amount) || 0), 0),
+    [profilePayments]
+  );
+
   return (
-    <div className="space-y-5">
-      {/* Toolbar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3 flex-1">
-          <div className="relative flex-1 min-w-[220px] max-w-sm">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+    <div className="space-y-5 animate-fade-in">
+      <PageHeader
+        title="Client Accounts"
+        description="Manage business contacts, active subscription tiers, domains, and account lifecycle."
+        meta={
+          !loading && (
+            <span className="font-mono-tabular text-xs text-zinc-400">
+              ({clients.filter((c) => !c.archived).length} active)
+            </span>
+          )
+        }
+        actions={
+          <button
+            type="button"
+            onClick={openAddModal}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[38px] text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors whitespace-nowrap shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            Add Client
+          </button>
+        }
+      />
+
+      {/* Filter Bar */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+        <SegmentedTabs
+          value={statusFilter}
+          onChange={setStatusFilter}
+          options={[
+            { id: 'ALL', label: 'All', count: statusCounts.ALL },
+            { id: 'Active', label: 'Active', count: statusCounts.Active },
+            { id: 'Prospect', label: 'Prospect', count: statusCounts.Prospect },
+            { id: 'Demo Presented', label: 'Demo', count: statusCounts['Demo Presented'] },
+            { id: 'Inactive', label: 'Inactive', count: statusCounts.Inactive },
+            { id: 'Cancelled', label: 'Cancelled', count: statusCounts.Cancelled },
+          ]}
+        />
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="relative flex-1 min-w-[220px] sm:w-64">
+            <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               aria-label="Search clients"
-              placeholder="Search name, ID, phone, domain, location..."
-              className="w-full pl-9 pr-3 py-2 text-sm bg-[#11131A] border border-white/[0.08] rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+              placeholder="Search name, code, phone, domain..."
+              className="w-full pl-9 pr-3 py-2 min-h-[38px] text-xs bg-[#111216] border border-white/[0.08] rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-blue-500"
             />
           </div>
-
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            aria-label="Filter by client status"
-            className="px-3 py-2 text-sm bg-[#11131A] border border-white/[0.08] rounded-lg text-slate-200 focus:outline-none focus:border-blue-500"
-          >
-            <option value="ALL">All Statuses</option>
-            {CLIENT_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
 
           <select
             value={packageFilter}
             onChange={(e) => setPackageFilter(e.target.value)}
             aria-label="Filter by package"
-            className="px-3 py-2 text-sm bg-[#11131A] border border-white/[0.08] rounded-lg text-slate-200 focus:outline-none focus:border-blue-500"
+            className={`${SELECT_CLASS} !min-h-[38px] !py-1.5 text-xs`}
           >
             <option value="ALL">All Packages</option>
             {settings.packages.map((p) => (
@@ -315,25 +362,16 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
             <option value="custom">Custom</option>
           </select>
 
-          <label className="inline-flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none px-2 py-2">
+          <label className="inline-flex items-center gap-2 text-xs text-zinc-300 cursor-pointer select-none px-3 py-2 min-h-[38px] rounded-lg bg-[#111216] border border-white/[0.08] hover:bg-white/[0.04]">
             <input
               type="checkbox"
               checked={showArchived}
               onChange={(e) => setShowArchived(e.target.checked)}
-              className="rounded border-white/20 bg-[#11131A] text-blue-600 focus:ring-blue-500"
+              className="rounded border-white/20 bg-[#09090B] text-blue-600 focus:ring-blue-500"
             />
-            <span>Show Archived</span>
+            <span>Archived</span>
           </label>
         </div>
-
-        <button
-          type="button"
-          onClick={openAddModal}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors whitespace-nowrap shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          Add Client
-        </button>
       </div>
 
       {/* Table / Mobile Cards */}
@@ -354,7 +392,7 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
           onAction={clients.length === 0 ? openAddModal : undefined}
         />
       ) : (
-        <div className="bg-[#11131A] border border-white/[0.08] rounded-xl overflow-hidden">
+        <div className="bg-[#111216] border border-white/[0.08] rounded-xl overflow-hidden">
           {/* Mobile Card Layout */}
           <div className="md:hidden divide-y divide-white/[0.06]">
             {pagination.paginatedItems.map((client) => {
@@ -370,7 +408,7 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                       className="text-left min-w-0"
                     >
                       <p className="font-medium text-white truncate">{client.businessName}</p>
-                      <p className="font-mono-tabular text-xs text-slate-400 mt-0.5">
+                      <p className="font-mono-tabular text-xs text-zinc-400 mt-0.5">
                         {client.clientCode}
                         {client.domainName ? ` · ${client.domainName}` : ''}
                       </p>
@@ -379,25 +417,25 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
-                      <p className="text-slate-500">Contact</p>
-                      <p className="text-slate-200 truncate">{client.contactName}</p>
-                      <p className="font-mono-tabular text-slate-400">{client.phone}</p>
+                      <p className="text-zinc-500">Contact</p>
+                      <p className="text-zinc-200 truncate">{client.contactName}</p>
+                      <p className="font-mono-tabular text-zinc-400">{client.phone}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-slate-500">{pkgName}</p>
+                      <p className="text-zinc-500">{pkgName}</p>
                       <p className="font-mono-tabular font-semibold text-white">
                         {formatKES(client.monthlyAmount, currency)}/mo
                       </p>
-                      <p className="text-slate-400 truncate">{client.location}</p>
+                      <p className="text-zinc-400 truncate">{client.location}</p>
                     </div>
                   </div>
                   <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.06]">
                     <button
                       type="button"
                       onClick={() => setViewingClient(client)}
-                      className="px-3 py-2 text-xs font-medium text-slate-200 bg-white/[0.04] hover:bg-white/[0.08] rounded-lg min-h-[38px]"
+                      className="px-3 py-2 text-xs font-medium text-zinc-200 bg-white/[0.04] hover:bg-white/[0.08] rounded-lg min-h-[38px]"
                     >
-                      Profile
+                      Inspect
                     </button>
                     <button
                       type="button"
@@ -429,15 +467,21 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
             })}
           </div>
 
-          {/* Desktop Table */}
+          {/* Desktop High-Density Table */}
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-white/[0.08] text-xs font-medium text-slate-400">
+                <tr className="border-b border-white/[0.07] bg-[#0D0E12]">
                   <SortableTh label="Client" sortKey="businessName" sort={sort} onSort={toggleSort} />
-                  <th className="py-3.5 px-4">Contact</th>
-                  <th className="py-3.5 px-4">Category & Location</th>
-                  <th className="py-3.5 px-4">Package</th>
+                  <th className="py-3 px-4 text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                    Contact
+                  </th>
+                  <th className="py-3 px-4 text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                    Category & Location
+                  </th>
+                  <th className="py-3 px-4 text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                    Plan
+                  </th>
                   <SortableTh
                     label="Monthly"
                     sortKey="monthlyAmount"
@@ -446,7 +490,9 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                     align="right"
                   />
                   <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
-                  <th className="py-3.5 px-4 text-right">Actions</th>
+                  <th className="py-3 px-4 text-right text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.06] text-sm">
@@ -455,11 +501,8 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                     settings.packages.find((p) => p.id === client.packageId)?.name ||
                     (client.packageId === 'custom' ? 'CUSTOM' : client.packageId.toUpperCase());
                   return (
-                    <tr
-                      key={client.id}
-                      className="hover:bg-white/[0.02] transition-colors"
-                    >
-                      <td className="py-3.5 px-4">
+                    <tr key={client.id} className="hover:bg-white/[0.025] transition-colors">
+                      <td className="py-3 px-4">
                         <button
                           type="button"
                           onClick={() => setViewingClient(client)}
@@ -468,44 +511,44 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                           <p className="font-medium text-white group-hover:text-blue-400 transition-colors">
                             {client.businessName}
                           </p>
-                          <p className="font-mono-tabular text-xs text-slate-400 mt-0.5">
+                          <p className="font-mono-tabular text-xs text-zinc-400 mt-0.5">
                             {client.clientCode}
                             {client.domainName ? ` · ${client.domainName}` : ''}
                           </p>
                         </button>
                       </td>
-                      <td className="py-3.5 px-4">
-                        <p className="text-slate-200">{client.contactName}</p>
-                        <p className="font-mono-tabular text-xs text-slate-400 mt-0.5">
+                      <td className="py-3 px-4">
+                        <p className="text-zinc-200">{client.contactName}</p>
+                        <p className="font-mono-tabular text-xs text-zinc-400 mt-0.5">
                           {client.phone}
                         </p>
                       </td>
-                      <td className="py-3.5 px-4 text-slate-300">
+                      <td className="py-3 px-4 text-zinc-300">
                         <p>{client.category}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">{client.location}</p>
+                        <p className="text-xs text-zinc-500 mt-0.5">{client.location}</p>
                       </td>
-                      <td className="py-3.5 px-4 text-xs font-medium text-slate-200">
+                      <td className="py-3 px-4 text-xs font-medium text-zinc-200">
                         {pkgName}
                       </td>
-                      <td className="py-3.5 px-4 text-right font-mono-tabular font-medium text-white">
+                      <td className="py-3 px-4 text-right font-mono-tabular font-medium text-white">
                         {formatKES(client.monthlyAmount, currency)}
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-4">
                         <div className="flex flex-col gap-0.5">
                           <StatusIndicator status={client.status} />
                           {client.archived && (
-                            <span className="text-[11px] text-slate-500">Archived</span>
+                            <span className="text-[11px] text-zinc-500">Archived</span>
                           )}
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-3 px-4 text-right">
                         <div className="inline-flex items-center justify-end gap-1">
                           <button
                             type="button"
                             onClick={() => setViewingClient(client)}
-                            title="View Client Profile"
+                            title="Inspect Client 360"
                             aria-label={`View ${client.businessName} profile`}
-                            className="p-2 text-slate-400 hover:text-white hover:bg-white/[0.06] rounded-lg transition-colors"
+                            className="p-2 text-zinc-400 hover:text-white hover:bg-white/[0.06] rounded-md transition-colors"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
@@ -514,7 +557,7 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                             onClick={() => openEditModal(client)}
                             title="Edit Client"
                             aria-label={`Edit ${client.businessName}`}
-                            className="p-2 text-slate-400 hover:text-blue-400 hover:bg-white/[0.06] rounded-lg transition-colors"
+                            className="p-2 text-zinc-400 hover:text-blue-400 hover:bg-white/[0.06] rounded-md transition-colors"
                           >
                             <Pencil className="w-4 h-4" />
                           </button>
@@ -524,7 +567,7 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                               onClick={() => void handleRestoreClient(client)}
                               title="Restore Client"
                               aria-label={`Restore ${client.businessName}`}
-                              className="p-2 text-slate-400 hover:text-emerald-400 hover:bg-white/[0.06] rounded-lg transition-colors"
+                              className="p-2 text-zinc-400 hover:text-emerald-400 hover:bg-white/[0.06] rounded-md transition-colors"
                             >
                               <RotateCcw className="w-4 h-4" />
                             </button>
@@ -534,7 +577,7 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                               onClick={() => setArchivingClient(client)}
                               title="Archive Client"
                               aria-label={`Archive ${client.businessName}`}
-                              className="p-2 text-slate-400 hover:text-amber-400 hover:bg-white/[0.06] rounded-lg transition-colors"
+                              className="p-2 text-zinc-400 hover:text-amber-400 hover:bg-white/[0.06] rounded-md transition-colors"
                             >
                               <Archive className="w-4 h-4" />
                             </button>
@@ -573,7 +616,7 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
         <form onSubmit={(e) => void handleSave(e)} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Business Name *
               </label>
               <input
@@ -583,12 +626,12 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                 value={formState.businessName}
                 onChange={(e) => setFormState({ ...formState, businessName: e.target.value })}
                 placeholder="e.g. Savanna Hardware Ltd"
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Owner / Contact Name *
               </label>
               <input
@@ -598,12 +641,12 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                 value={formState.contactName}
                 onChange={(e) => setFormState({ ...formState, contactName: e.target.value })}
                 placeholder="Full name"
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Phone Number *
               </label>
               <input
@@ -613,12 +656,12 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                 value={formState.phone}
                 onChange={(e) => setFormState({ ...formState, phone: e.target.value })}
                 placeholder="+254 7XX XXX XXX"
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Email Address
               </label>
               <input
@@ -627,12 +670,12 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                 value={formState.email || ''}
                 onChange={(e) => setFormState({ ...formState, email: e.target.value })}
                 placeholder="owner@business.co.ke"
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Business Category *
               </label>
               <input
@@ -642,12 +685,12 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                 value={formState.category}
                 onChange={(e) => setFormState({ ...formState, category: e.target.value })}
                 placeholder="e.g. Clinic, Retail, Salon, Logistics"
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Business Location *
               </label>
               <input
@@ -657,12 +700,12 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                 value={formState.location}
                 onChange={(e) => setFormState({ ...formState, location: e.target.value })}
                 placeholder="e.g. Nairobi, Westlands"
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Date Registered *
               </label>
               <input
@@ -670,12 +713,12 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                 required
                 value={formState.registeredAt}
                 onChange={(e) => setFormState({ ...formState, registeredAt: e.target.value })}
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Domain Name
               </label>
               <input
@@ -684,12 +727,12 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                 value={formState.domainName || ''}
                 onChange={(e) => setFormState({ ...formState, domainName: e.target.value })}
                 placeholder="example.co.ke"
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Website URL
               </label>
               <input
@@ -698,18 +741,18 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                 value={formState.websiteUrl || ''}
                 onChange={(e) => setFormState({ ...formState, websiteUrl: e.target.value })}
                 placeholder="https://example.co.ke"
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Package *
               </label>
               <select
                 value={formState.packageId}
                 onChange={(e) => handlePackageChange(e.target.value)}
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               >
                 {settings.packages.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -721,7 +764,7 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Monthly Amount ({currency}) *
               </label>
               <input
@@ -734,12 +777,12 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                 onChange={(e) =>
                   setFormState({ ...formState, monthlyAmount: Number(e.target.value) || 0 })
                 }
-                className="w-full px-3.5 py-2 text-sm font-mono-tabular bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={`${INPUT_CLASS} font-mono-tabular`}
               />
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Client Status *
               </label>
               <select
@@ -747,7 +790,7 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                 onChange={(e) =>
                   setFormState({ ...formState, status: e.target.value as ClientStatus })
                 }
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               >
                 {CLIENT_STATUSES.map((s) => (
                   <option key={s} value={s}>
@@ -758,7 +801,7 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Additional Notes
               </label>
               <textarea
@@ -767,7 +810,7 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                 value={formState.notes || ''}
                 onChange={(e) => setFormState({ ...formState, notes: e.target.value })}
                 placeholder="Requirements, account context, or billing preferences..."
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/[0.1] rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-blue-500"
               />
             </div>
           </div>
@@ -776,7 +819,7 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
             <button
               type="button"
               onClick={() => setFormOpen(false)}
-              className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-white/[0.05] rounded-lg"
+              className="px-4 py-2 text-sm font-medium text-zinc-300 hover:text-white bg-white/[0.05] rounded-lg"
             >
               Cancel
             </button>
@@ -791,7 +834,7 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
         </form>
       </SlideOverModal>
 
-      {/* Client Profile Detail SlideOver */}
+      {/* Client 360 Quick-Inspector Drawer */}
       <SlideOverModal
         open={Boolean(viewingClient)}
         onClose={() => setViewingClient(null)}
@@ -805,30 +848,30 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
       >
         {viewingClient && (
           <div className="space-y-6">
-            {/* Summary Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-5 border-b border-white/[0.08]">
-              <div className="space-y-1.5">
-                <p className="text-xs text-slate-400">Primary Contact</p>
-                <p className="text-sm font-medium text-white">{viewingClient.contactName}</p>
-                <p className="text-xs font-mono-tabular text-slate-300">
-                  {viewingClient.phone}
-                  {viewingClient.email ? ` · ${viewingClient.email}` : ''}
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                <p className="text-xs text-slate-400">Location & Category</p>
-                <p className="text-sm font-medium text-white">
-                  {viewingClient.category} · {viewingClient.location}
-                </p>
-                <div className="flex items-center gap-3">
-                  <StatusIndicator status={viewingClient.status} />
-                  <span className="text-xs font-mono-tabular text-slate-300">
-                    {formatKES(viewingClient.monthlyAmount, currency)}/mo
-                  </span>
+            {/* Quick Actions Bar + Metrics */}
+            <div className="bg-[#0D0E12] border border-white/[0.08] rounded-xl overflow-hidden">
+              <div className="grid grid-cols-3 divide-x divide-white/[0.07]">
+                <div className="p-3.5">
+                  <p className="text-[11px] text-zinc-500">Monthly Plan</p>
+                  <p className="font-mono-tabular text-base font-semibold text-white mt-0.5">
+                    {formatKES(viewingClient.monthlyAmount, currency)}
+                  </p>
+                </div>
+                <div className="p-3.5">
+                  <p className="text-[11px] text-zinc-500">Lifetime Paid</p>
+                  <p className="font-mono-tabular text-base font-semibold text-emerald-400 mt-0.5">
+                    {formatKES(profilePaidTotal, currency)}
+                  </p>
+                </div>
+                <div className="p-3.5">
+                  <p className="text-[11px] text-zinc-500">Status</p>
+                  <div className="mt-1">
+                    <StatusIndicator status={viewingClient.status} />
+                  </div>
                 </div>
               </div>
-              {viewingClient.websiteUrl && (
-                <div className="sm:col-span-2">
+              <div className="px-4 py-2.5 border-t border-white/[0.07] flex flex-wrap items-center justify-between gap-2">
+                {viewingClient.websiteUrl ? (
                   <a
                     href={viewingClient.websiteUrl}
                     target="_blank"
@@ -838,30 +881,65 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
                     <span>{viewingClient.websiteUrl}</span>
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
+                ) : (
+                  <span className="text-xs text-zinc-500">No website URL attached</span>
+                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(viewingClient)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-white/[0.06] hover:bg-white/[0.1] rounded-md"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Edit Client
+                  </button>
                 </div>
-              )}
+              </div>
+            </div>
+
+            {/* Contact Summary */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-5 border-b border-white/[0.08]">
+              <div className="space-y-1">
+                <p className="text-xs text-zinc-500">Primary Contact</p>
+                <p className="text-sm font-medium text-white">{viewingClient.contactName}</p>
+                <p className="text-xs font-mono-tabular text-zinc-300">
+                  {viewingClient.phone}
+                  {viewingClient.email ? ` · ${viewingClient.email}` : ''}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-zinc-500">Sector & Location</p>
+                <p className="text-sm font-medium text-white">
+                  {viewingClient.category} · {viewingClient.location}
+                </p>
+                {viewingClient.domainName && (
+                  <p className="text-xs text-zinc-400 font-mono">{viewingClient.domainName}</p>
+                )}
+              </div>
               {viewingClient.notes && (
-                <div className="sm:col-span-2">
-                  <p className="text-xs text-slate-400 mb-1">Notes</p>
-                  <p className="text-sm text-slate-200 whitespace-pre-wrap">{viewingClient.notes}</p>
+                <div className="sm:col-span-2 pt-2">
+                  <p className="text-xs text-zinc-500 mb-1">Account Notes</p>
+                  <p className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                    {viewingClient.notes}
+                  </p>
                 </div>
               )}
             </div>
 
             {/* Linked Websites */}
             <div>
-              <h3 className="text-sm font-semibold text-white mb-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-2.5">
                 Websites ({profileWebsites.length})
               </h3>
               {profileWebsites.length === 0 ? (
-                <p className="text-xs text-slate-400">No websites linked to this client yet.</p>
+                <p className="text-xs text-zinc-500">No websites linked to this client yet.</p>
               ) : (
-                <div className="divide-y divide-white/[0.06] border border-white/[0.08] rounded-lg">
+                <div className="divide-y divide-white/[0.06] border border-white/[0.08] rounded-lg bg-[#0D0E12]">
                   {profileWebsites.map((w) => (
                     <div key={w.id} className="p-3 flex items-center justify-between gap-3">
                       <div>
                         <p className="text-sm font-medium text-white">{w.websiteName}</p>
-                        <p className="text-xs text-slate-400">
+                        <p className="text-xs text-zinc-400">
                           {w.domain || 'No domain'} · {w.hostingProvider}
                         </p>
                       </div>
@@ -874,20 +952,20 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
 
             {/* Linked Subscriptions */}
             <div>
-              <h3 className="text-sm font-semibold text-white mb-3">
-                Subscription History ({profileSubscriptions.length})
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-2.5">
+                Subscriptions ({profileSubscriptions.length})
               </h3>
               {profileSubscriptions.length === 0 ? (
-                <p className="text-xs text-slate-400">No subscriptions recorded for this client.</p>
+                <p className="text-xs text-zinc-500">No subscriptions recorded for this client.</p>
               ) : (
-                <div className="divide-y divide-white/[0.06] border border-white/[0.08] rounded-lg">
+                <div className="divide-y divide-white/[0.06] border border-white/[0.08] rounded-lg bg-[#0D0E12]">
                   {profileSubscriptions.map((s) => (
                     <div key={s.id} className="p-3 flex items-center justify-between gap-3">
                       <div>
                         <p className="text-sm font-medium text-white">
                           {s.packageName} · {s.subscriptionCode}
                         </p>
-                        <p className="text-xs text-slate-400">
+                        <p className="text-xs text-zinc-400">
                           Start {formatDisplayDate(s.startDate)} · Next due{' '}
                           {formatDisplayDate(s.nextPaymentDate)}
                         </p>
@@ -907,20 +985,20 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
             {/* Payment & Invoice History */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <h3 className="text-sm font-semibold text-white mb-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-2.5">
                   Payments ({profilePayments.length})
                 </h3>
                 {profilePayments.length === 0 ? (
-                  <p className="text-xs text-slate-400">No payments recorded.</p>
+                  <p className="text-xs text-zinc-500">No payments recorded.</p>
                 ) : (
-                  <div className="divide-y divide-white/[0.06] border border-white/[0.08] rounded-lg">
+                  <div className="divide-y divide-white/[0.06] border border-white/[0.08] rounded-lg bg-[#0D0E12]">
                     {profilePayments.map((p) => (
                       <div key={p.id} className="p-3 flex items-center justify-between gap-2">
                         <div>
                           <p className="font-mono-tabular text-xs font-medium text-white">
                             {p.transactionReference}
                           </p>
-                          <p className="text-[11px] text-slate-400">
+                          <p className="text-[11px] text-zinc-400">
                             {p.method} · {formatDisplayDate(p.paymentDate)}
                           </p>
                         </div>
@@ -937,20 +1015,20 @@ export function ClientsPage({ focusedRecordId, onClearFocusedRecord }: ClientsPa
               </div>
 
               <div>
-                <h3 className="text-sm font-semibold text-white mb-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-2.5">
                   Invoices ({profileInvoices.length})
                 </h3>
                 {profileInvoices.length === 0 ? (
-                  <p className="text-xs text-slate-400">No invoices issued.</p>
+                  <p className="text-xs text-zinc-500">No invoices issued.</p>
                 ) : (
-                  <div className="divide-y divide-white/[0.06] border border-white/[0.08] rounded-lg">
+                  <div className="divide-y divide-white/[0.06] border border-white/[0.08] rounded-lg bg-[#0D0E12]">
                     {profileInvoices.map((inv) => (
                       <div key={inv.id} className="p-3 flex items-center justify-between gap-2">
                         <div>
                           <p className="font-mono-tabular text-xs font-medium text-white">
                             {inv.invoiceNumber}
                           </p>
-                          <p className="text-[11px] text-slate-400">
+                          <p className="text-[11px] text-zinc-400">
                             Due {formatDisplayDate(inv.dueDate)}
                           </p>
                         </div>

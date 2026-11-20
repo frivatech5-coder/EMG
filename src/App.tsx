@@ -6,6 +6,7 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { TableSkeleton } from './components/ui/EmptyState';
 import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
+import { CommandPalette } from './components/layout/CommandPalette';
 import { OfflineIndicator, PWAUpdateBanner } from './components/pwa/PWAControls';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -74,6 +75,26 @@ function AuthenticatedWorkspace() {
   const [activeSection, setActiveSection] = useState<NavSection>(initial.section);
   const [focusedRecordId, setFocusedRecordId] = useState<string | null>(initial.recordId);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('emg_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSidebarCollapse = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('emg_sidebar_collapsed', String(next));
+      } catch {
+        // Ignore storage restrictions
+      }
+      return next;
+    });
+  }, []);
 
   const navigateTo = useCallback((section: NavSection, recordId?: string) => {
     setActiveSection(section);
@@ -85,6 +106,17 @@ function AuthenticatedWorkspace() {
     if (typeof window !== 'undefined' && window.location.search) {
       window.history.replaceState({}, '', window.location.pathname);
     }
+  }, []);
+
+  useEffect(() => {
+    const onGlobalKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCommandOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onGlobalKey);
+    return () => window.removeEventListener('keydown', onGlobalKey);
   }, []);
 
   useEffect(() => {
@@ -108,9 +140,11 @@ function AuthenticatedWorkspace() {
 
   if (!authReady) {
     return (
-      <div className="min-h-screen bg-[#09090B] text-slate-300 flex flex-col items-center justify-center gap-3">
-        <div className="w-8 h-8 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
-        <p className="text-sm text-slate-400">Verifying EMG administrator session...</p>
+      <div className="min-h-screen bg-[#09090B] text-zinc-300 flex flex-col items-center justify-center gap-3">
+        <div className="w-7 h-7 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+        <p className="text-xs font-medium text-zinc-400 tracking-wide">
+          Verifying EMG administrator session...
+        </p>
       </div>
     );
   }
@@ -121,21 +155,25 @@ function AuthenticatedWorkspace() {
 
   return (
     <DataProvider>
-      <div className="min-h-screen bg-[#09090B] text-slate-100 flex">
+      <div className="min-h-screen bg-[#09090B] text-zinc-100 flex">
         <Sidebar
           activeSection={activeSection}
           onSelect={(sec) => navigateTo(sec)}
           mobileOpen={mobileMenuOpen}
           onCloseMobile={() => setMobileMenuOpen(false)}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={toggleSidebarCollapse}
+          onOpenCommand={() => setCommandOpen(true)}
         />
         <div className="flex-1 min-w-0 flex flex-col">
           <TopBar
             activeSection={activeSection}
             onOpenMobileMenu={() => setMobileMenuOpen(true)}
             onNavigate={navigateTo}
+            onOpenCommand={() => setCommandOpen(true)}
           />
           <OfflineIndicator />
-          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1440px] w-full mx-auto">
+          <main className="flex-1 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-7 max-w-[1440px] w-full mx-auto">
             {activeSection === 'dashboard' && (
               <DashboardPage onNavigate={(sec, recordId) => navigateTo(sec, recordId)} />
             )}
@@ -185,6 +223,12 @@ function AuthenticatedWorkspace() {
             </Suspense>
           </main>
         </div>
+
+        <CommandPalette
+          open={commandOpen}
+          onClose={() => setCommandOpen(false)}
+          onNavigate={navigateTo}
+        />
       </div>
     </DataProvider>
   );

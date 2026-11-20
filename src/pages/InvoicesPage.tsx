@@ -12,7 +12,13 @@ import { useData } from '../context/DataContext';
 import { useToast } from '../components/ui/ToastContext';
 import { SlideOverModal } from '../components/ui/SlideOverModal';
 import { StatusIndicator } from '../components/ui/StatusBadge';
-import { EmptyState, ErrorState, TableSkeleton } from '../components/ui/EmptyState';
+import {
+  EmptyState,
+  ErrorState,
+  SummaryStripSkeleton,
+  TableSkeleton,
+} from '../components/ui/EmptyState';
+import { INPUT_CLASS, PageHeader, SegmentedTabs } from '../components/ui/PageHeader';
 import {
   PaginationBar,
   SortableTh,
@@ -96,6 +102,40 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
     paymentInstructions: settings.paymentInstructions || '',
     notes: '',
   });
+
+  const summary = useMemo(() => {
+    let paidAmount = 0;
+    let unpaidAmount = 0;
+    let overdueAmount = 0;
+    let paidCount = 0;
+    let unpaidCount = 0;
+    let overdueCount = 0;
+    let draftCount = 0;
+    for (const inv of invoices) {
+      const amt = Number(inv.amount) || 0;
+      if (inv.status === 'Paid') {
+        paidAmount += amt;
+        paidCount += 1;
+      } else if (inv.status === 'Unpaid') {
+        unpaidAmount += amt;
+        unpaidCount += 1;
+      } else if (inv.status === 'Overdue') {
+        overdueAmount += amt;
+        overdueCount += 1;
+      } else if (inv.status === 'Draft') {
+        draftCount += 1;
+      }
+    }
+    return {
+      paidAmount,
+      unpaidAmount,
+      overdueAmount,
+      paidCount,
+      unpaidCount,
+      overdueCount,
+      draftCount,
+    };
+  }, [invoices]);
 
   const filteredInvoices = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -219,46 +259,84 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
   };
 
   return (
-    <div className="space-y-5">
-      {/* Toolbar */}
-      <div className="no-print flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              aria-label="Search invoices"
-              placeholder="Search invoice #, client, description..."
-              className="w-full pl-9 pr-3 py-2 min-h-[40px] text-sm bg-[#11131A] border border-white/[0.08] rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
-            />
+    <div className="space-y-5 animate-fade-in">
+      <div className="no-print">
+        <PageHeader
+          title="Invoices & Statements"
+          description="Generate numbered client invoices, preview branded sheets, print, or download PDFs."
+          actions={
+            <button
+              type="button"
+              onClick={openCreateModal}
+              disabled={clients.length === 0}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[38px] text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors whitespace-nowrap shrink-0 disabled:opacity-50"
+            >
+              <Plus className="w-4 h-4" />
+              Generate Invoice
+            </button>
+          }
+        />
+      </div>
+
+      {/* Unified Receivables Summary Bar */}
+      <div className="no-print">
+        {loading ? (
+          <SummaryStripSkeleton cards={4} />
+        ) : (
+          <div className="bg-[#111216] border border-white/[0.08] rounded-xl overflow-hidden grid grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-white/[0.07]">
+            <div className="p-4 sm:p-5">
+              <p className="text-xs text-zinc-400">Paid Invoices</p>
+              <p className="mt-1 font-mono-tabular text-xl font-semibold text-emerald-400">
+                {formatKES(summary.paidAmount, currency)}
+              </p>
+            </div>
+            <div className="p-4 sm:p-5">
+              <p className="text-xs text-zinc-400">Unpaid Receivables</p>
+              <p className="mt-1 font-mono-tabular text-xl font-semibold text-amber-400">
+                {formatKES(summary.unpaidAmount, currency)}
+              </p>
+            </div>
+            <div className="p-4 sm:p-5">
+              <p className="text-xs text-zinc-400">Overdue Invoices</p>
+              <p className="mt-1 font-mono-tabular text-xl font-semibold text-red-400">
+                {formatKES(summary.overdueAmount, currency)}
+              </p>
+            </div>
+            <div className="p-4 sm:p-5">
+              <p className="text-xs text-zinc-400">Total Issued</p>
+              <p className="mt-1 font-mono-tabular text-xl font-semibold text-white">
+                {invoices.length}
+              </p>
+            </div>
           </div>
+        )}
+      </div>
 
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            aria-label="Filter by invoice status"
-            className="px-3 py-2 min-h-[40px] text-sm bg-[#11131A] border border-white/[0.08] rounded-lg text-slate-200 focus:outline-none focus:border-blue-500"
-          >
-            <option value="ALL">All Statuses</option>
-            {INVOICE_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
+      {/* Toolbar */}
+      <div className="no-print flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+        <SegmentedTabs
+          value={statusFilter}
+          onChange={setStatusFilter}
+          options={[
+            { id: 'ALL', label: 'All', count: invoices.length },
+            { id: 'Unpaid', label: 'Unpaid', count: summary.unpaidCount },
+            { id: 'Overdue', label: 'Overdue', count: summary.overdueCount },
+            { id: 'Paid', label: 'Paid', count: summary.paidCount },
+            { id: 'Draft', label: 'Draft', count: summary.draftCount },
+          ]}
+        />
+
+        <div className="relative flex-1 min-w-[200px] xl:max-w-xs">
+          <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search invoices"
+            placeholder="Search invoice #, client, description..."
+            className="w-full pl-9 pr-3 py-2 min-h-[38px] text-xs bg-[#111216] border border-white/[0.08] rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-blue-500"
+          />
         </div>
-
-        <button
-          type="button"
-          onClick={openCreateModal}
-          disabled={clients.length === 0}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[40px] text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors whitespace-nowrap shrink-0 disabled:opacity-50"
-        >
-          <Plus className="w-4 h-4" />
-          Generate Invoice
-        </button>
       </div>
 
       {/* Table / Mobile Cards */}
@@ -280,7 +358,7 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
             onAction={invoices.length === 0 && clients.length > 0 ? openCreateModal : undefined}
           />
         ) : (
-          <div className="bg-[#11131A] border border-white/[0.08] rounded-xl overflow-hidden">
+          <div className="bg-[#111216] border border-white/[0.08] rounded-xl overflow-hidden">
             {/* Mobile Cards */}
             <div className="md:hidden divide-y divide-white/[0.06]">
               {paginatedItems.map((inv) => (
@@ -290,15 +368,15 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
                       <p className="font-mono-tabular text-sm font-semibold text-white">
                         {inv.invoiceNumber}
                       </p>
-                      <p className="text-sm text-slate-200 truncate">{inv.clientName}</p>
+                      <p className="text-sm text-zinc-200 truncate">{inv.clientName}</p>
                     </div>
                     <StatusIndicator status={inv.status} />
                   </div>
 
-                  <p className="text-xs text-slate-400 line-clamp-2">{inv.description}</p>
+                  <p className="text-xs text-zinc-400 line-clamp-2">{inv.description}</p>
 
                   <div className="flex items-center justify-between gap-3 text-xs">
-                    <span className="font-mono-tabular text-slate-400">
+                    <span className="font-mono-tabular text-zinc-400">
                       Issued {formatDisplayDate(inv.issueDate)} · Due {formatDisplayDate(inv.dueDate)}
                     </span>
                     <span className="font-mono-tabular text-sm font-semibold text-white shrink-0">
@@ -310,7 +388,7 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
                     <button
                       type="button"
                       onClick={() => setPreviewInvoice(inv)}
-                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 min-h-[40px] text-xs font-medium text-slate-200 bg-white/[0.05] hover:bg-white/[0.09] border border-white/[0.08] rounded-lg transition-colors"
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 min-h-[40px] text-xs font-medium text-zinc-200 bg-white/[0.05] hover:bg-white/[0.09] border border-white/[0.08] rounded-lg transition-colors"
                     >
                       <Printer className="w-3.5 h-3.5" />
                       Preview
@@ -327,7 +405,7 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
                       type="button"
                       onClick={() => openEditModal(inv)}
                       aria-label={`Edit invoice ${inv.invoiceNumber}`}
-                      className="p-2 min-h-[40px] min-w-[40px] inline-flex items-center justify-center text-slate-300 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-lg transition-colors"
+                      className="p-2 min-h-[40px] min-w-[40px] inline-flex items-center justify-center text-zinc-300 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-lg transition-colors"
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
@@ -336,50 +414,60 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
               ))}
             </div>
 
-            {/* Desktop Table */}
+            {/* Desktop High-Density Table */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-white/[0.08] text-xs font-medium text-slate-400">
+                  <tr className="border-b border-white/[0.07] bg-[#0D0E12]">
                     <SortableTh label="Invoice #" sortKey="invoiceNumber" sort={sort} onSort={toggleSort} />
                     <SortableTh label="Client" sortKey="clientName" sort={sort} onSort={toggleSort} />
-                    <th className="py-3.5 px-4">Description</th>
+                    <th className="py-3 px-4 text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                      Description
+                    </th>
                     <SortableTh label="Issued / Due" sortKey="dueDate" sort={sort} onSort={toggleSort} />
                     <SortableTh label="Amount" sortKey="amount" sort={sort} onSort={toggleSort} align="right" />
                     <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
-                    <th className="py-3.5 px-4 text-right">Actions</th>
+                    <th className="py-3 px-4 text-right text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.06] text-sm">
                   {paginatedItems.map((inv) => (
-                    <tr key={inv.id} className="hover:bg-white/[0.02] transition-colors">
-                      <td className="py-3.5 px-4 font-mono-tabular font-medium text-white whitespace-nowrap">
-                        {inv.invoiceNumber}
+                    <tr key={inv.id} className="hover:bg-white/[0.025] transition-colors">
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewInvoice(inv)}
+                          className="font-mono-tabular font-medium text-white hover:text-blue-400 transition-colors"
+                        >
+                          {inv.invoiceNumber}
+                        </button>
                       </td>
-                      <td className="py-3.5 px-4 text-slate-200">{inv.clientName}</td>
-                      <td className="py-3.5 px-4 text-slate-300 max-w-xs truncate">
+                      <td className="py-3 px-4 text-zinc-200">{inv.clientName}</td>
+                      <td className="py-3 px-4 text-zinc-400 max-w-xs truncate">
                         {inv.description}
                       </td>
-                      <td className="py-3.5 px-4 font-mono-tabular text-xs text-slate-300 whitespace-nowrap">
+                      <td className="py-3 px-4 font-mono-tabular text-xs text-zinc-300 whitespace-nowrap">
                         <p>{formatDisplayDate(inv.issueDate)}</p>
-                        <p className="text-slate-400 mt-0.5">
+                        <p className="text-zinc-500 mt-0.5">
                           Due {formatDisplayDate(inv.dueDate)}
                         </p>
                       </td>
-                      <td className="py-3.5 px-4 text-right font-mono-tabular font-semibold text-white whitespace-nowrap">
+                      <td className="py-3 px-4 text-right font-mono-tabular font-semibold text-white whitespace-nowrap">
                         {formatKES(inv.amount, currency)}
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-4">
                         <StatusIndicator status={inv.status} />
                       </td>
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-3 px-4 text-right">
                         <div className="inline-flex items-center justify-end gap-1">
                           <button
                             type="button"
                             onClick={() => setPreviewInvoice(inv)}
                             title="Preview & Print Invoice"
                             aria-label={`Preview invoice ${inv.invoiceNumber}`}
-                            className="p-2 text-slate-400 hover:text-white hover:bg-white/[0.06] rounded-lg transition-colors"
+                            className="p-2 text-zinc-400 hover:text-white hover:bg-white/[0.06] rounded-md transition-colors"
                           >
                             <Printer className="w-4 h-4" />
                           </button>
@@ -388,7 +476,7 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
                             onClick={() => generateInvoicePdf(inv, settings)}
                             title="Download PDF"
                             aria-label={`Download PDF for ${inv.invoiceNumber}`}
-                            className="p-2 text-slate-400 hover:text-blue-400 hover:bg-white/[0.06] rounded-lg transition-colors"
+                            className="p-2 text-zinc-400 hover:text-blue-400 hover:bg-white/[0.06] rounded-md transition-colors"
                           >
                             <Download className="w-4 h-4" />
                           </button>
@@ -397,7 +485,7 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
                             onClick={() => openEditModal(inv)}
                             title="Edit Invoice"
                             aria-label={`Edit invoice ${inv.invoiceNumber}`}
-                            className="p-2 text-slate-400 hover:text-blue-400 hover:bg-white/[0.06] rounded-lg transition-colors"
+                            className="p-2 text-zinc-400 hover:text-blue-400 hover:bg-white/[0.06] rounded-md transition-colors"
                           >
                             <Pencil className="w-4 h-4" />
                           </button>
@@ -435,7 +523,7 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
         <form onSubmit={(e) => void handleSave(e)} className="space-y-4">
           {!editingInvoice && (
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Client *</label>
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">Client *</label>
               <select
                 required
                 value={formState.clientId}
@@ -455,7 +543,7 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
                       : formState.description,
                   });
                 }}
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               >
                 <option value="">Select client...</option>
                 {clients.map((c) => (
@@ -469,7 +557,7 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
 
           {clientSubs.length > 0 && (
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Link Subscription (Optional)
               </label>
               <select
@@ -485,7 +573,7 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
                       : formState.description,
                   });
                 }}
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               >
                 <option value="">Custom Invoice</option>
                 {clientSubs.map((s) => (
@@ -498,7 +586,7 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
           )}
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">
+            <label className="block text-xs font-medium text-zinc-300 mb-1.5">
               Description *
             </label>
             <textarea
@@ -508,13 +596,13 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
               value={formState.description}
               onChange={(e) => setFormState({ ...formState, description: e.target.value })}
               placeholder="Website design, domain setup, or monthly hosting subscription..."
-              className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+              className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/[0.1] rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-blue-500"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Amount ({currency}) *
               </label>
               <input
@@ -527,18 +615,18 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
                 onChange={(e) =>
                   setFormState({ ...formState, amount: Number(e.target.value) || 0 })
                 }
-                className="w-full px-3.5 py-2 text-sm font-mono-tabular bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={`${INPUT_CLASS} font-mono-tabular`}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Status *</label>
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">Status *</label>
               <select
                 value={formState.status}
                 onChange={(e) =>
                   setFormState({ ...formState, status: e.target.value as InvoiceStatus })
                 }
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               >
                 {INVOICE_STATUSES.map((s) => (
                   <option key={s} value={s}>
@@ -549,7 +637,7 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Issue Date *
               </label>
               <input
@@ -557,24 +645,24 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
                 required
                 value={formState.issueDate}
                 onChange={(e) => setFormState({ ...formState, issueDate: e.target.value })}
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Due Date *</label>
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">Due Date *</label>
               <input
                 type="date"
                 required
                 value={formState.dueDate}
                 onChange={(e) => setFormState({ ...formState, dueDate: e.target.value })}
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">
+            <label className="block text-xs font-medium text-zinc-300 mb-1.5">
               Payment Instructions
             </label>
             <textarea
@@ -585,7 +673,7 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
                 setFormState({ ...formState, paymentInstructions: e.target.value })
               }
               placeholder="Configured in Settings (e.g. M-Pesa Paybill / Till / Bank details)..."
-              className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+              className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/[0.1] rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-blue-500"
             />
           </div>
 
@@ -593,7 +681,7 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
             <button
               type="button"
               onClick={() => setFormOpen(false)}
-              className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-white/[0.05] rounded-lg"
+              className="px-4 py-2 text-sm font-medium text-zinc-300 hover:text-white bg-white/[0.05] rounded-lg"
             >
               Cancel
             </button>
@@ -611,14 +699,14 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
       {/* Printable Invoice Preview Modal */}
       {previewInvoice && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 overflow-y-auto"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 overflow-y-auto animate-fade-in"
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-3xl bg-white text-slate-900 rounded-xl shadow-2xl overflow-hidden print-only-sheet my-auto">
+          <div className="w-full max-w-3xl bg-white text-slate-900 rounded-xl shadow-2xl overflow-hidden print-only-sheet my-auto animate-scale-in">
             {/* Modal controls hidden on print */}
-            <div className="no-print flex items-center justify-between gap-4 px-6 py-4 bg-slate-900 text-white">
-              <span className="text-sm font-semibold">
+            <div className="no-print flex items-center justify-between gap-4 px-6 py-4 bg-[#0D0E12] text-white border-b border-white/10">
+              <span className="text-sm font-semibold font-mono-tabular">
                 Invoice Preview — {previewInvoice.invoiceNumber}
               </span>
               <div className="flex items-center gap-2">
@@ -642,7 +730,7 @@ export function InvoicesPage({ focusedRecordId, onClearFocusedRecord }: Invoices
                   type="button"
                   onClick={() => setPreviewInvoice(null)}
                   aria-label="Close preview"
-                  className="p-1.5 text-slate-300 hover:text-white rounded-lg"
+                  className="p-1.5 text-zinc-300 hover:text-white rounded-lg"
                 >
                   <X className="w-4 h-4" />
                 </button>

@@ -45,14 +45,16 @@ const TONE_CLASSES: Record<StatusTone, string> = {
   warning: 'text-amber-400',
   danger: 'text-red-400',
   info: 'text-blue-400',
-  muted: 'text-slate-400',
+  muted: 'text-zinc-400',
 };
 
 export function StatusIndicator({ status }: { status: string }) {
   const entry = TONE_MAP[status] || { tone: 'muted' as StatusTone, Icon: Clock };
   const Icon = entry.Icon;
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap ${TONE_CLASSES[entry.tone]}`}>
+    <span
+      className={`inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap ${TONE_CLASSES[entry.tone]}`}
+    >
       <Icon className="w-3.5 h-3.5 shrink-0" />
       <span>{status}</span>
     </span>

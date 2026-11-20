@@ -7,6 +7,8 @@ import {
   UserCheck,
   ExternalLink,
   CalendarClock,
+  Kanban,
+  List,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useToast } from '../components/ui/ToastContext';
@@ -18,6 +20,11 @@ import {
   SummaryStripSkeleton,
   TableSkeleton,
 } from '../components/ui/EmptyState';
+import {
+  INPUT_CLASS,
+  PageHeader,
+  SELECT_CLASS,
+} from '../components/ui/PageHeader';
 import {
   PaginationBar,
   SortableTh,
@@ -60,6 +67,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
   const { leads, settings, loading, syncError, retrySync } = useData();
   const { showToast } = useToast();
 
+  const [viewMode, setViewMode] = useState<'pipeline' | 'table'>('pipeline');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [channelFilter, setChannelFilter] = useState<string>('ALL');
@@ -205,6 +213,19 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
     paginatedItems,
   } = useTablePagination(filteredLeads, 10);
 
+  const leadsByStage = useMemo(() => {
+    const groups = new Map<LeadStatus, Lead[]>();
+    for (const st of LEAD_STATUSES) {
+      groups.set(st, []);
+    }
+    for (const l of filteredLeads) {
+      const bucket = groups.get(l.status) || [];
+      bucket.push(l);
+      groups.set(l.status, bucket);
+    }
+    return groups;
+  }, [filteredLeads]);
+
   const openAddModal = () => {
     setEditingLead(null);
     setFormState({
@@ -329,30 +350,70 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
   };
 
   return (
-    <div className="space-y-5">
-      {/* CRM Conversion Stats */}
+    <div className="space-y-5 animate-fade-in">
+      <PageHeader
+        title="Leads CRM Pipeline"
+        description="Track outreach stages, demo presentations, scheduled follow-ups, and convert prospects into paying clients."
+        actions={
+          <>
+            <div className="inline-flex items-center p-0.5 rounded-lg bg-[#111216] border border-white/[0.08]">
+              <button
+                type="button"
+                onClick={() => setViewMode('pipeline')}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 min-h-[34px] text-xs font-medium rounded-md transition-colors ${
+                  viewMode === 'pipeline' ? 'bg-white/[0.1] text-white' : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <Kanban className="w-3.5 h-3.5" />
+                Pipeline
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 min-h-[34px] text-xs font-medium rounded-md transition-colors ${
+                  viewMode === 'table' ? 'bg-white/[0.1] text-white' : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <List className="w-3.5 h-3.5" />
+                List
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={openAddModal}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[38px] text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors whitespace-nowrap shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              Add Lead
+            </button>
+          </>
+        }
+      />
+
+      {/* Unified CRM Conversion Strip */}
       {loading ? (
         <SummaryStripSkeleton cards={4} />
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-[#11131A] border border-white/[0.08] rounded-xl p-4">
-            <p className="text-xs text-slate-400">Active Pipeline Leads</p>
+        <div className="bg-[#111216] border border-white/[0.08] rounded-xl overflow-hidden grid grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-white/[0.07]">
+          <div className="p-4 sm:p-5">
+            <p className="text-xs text-zinc-400">Active Pipeline</p>
             <p className="mt-1 font-mono-tabular text-xl font-semibold text-white">{stats.active}</p>
           </div>
-          <div className="bg-[#11131A] border border-white/[0.08] rounded-xl p-4">
-            <p className="text-xs text-slate-400">Follow-ups Due Today / Past</p>
+          <div className="p-4 sm:p-5">
+            <p className="text-xs text-zinc-400">Follow-ups Due</p>
             <p className="mt-1 font-mono-tabular text-xl font-semibold text-amber-400">
               {stats.followUpsDue.length}
             </p>
           </div>
-          <div className="bg-[#11131A] border border-white/[0.08] rounded-xl p-4">
-            <p className="text-xs text-slate-400">Converted to Clients</p>
+          <div className="p-4 sm:p-5">
+            <p className="text-xs text-zinc-400">Converted Clients</p>
             <p className="mt-1 font-mono-tabular text-xl font-semibold text-emerald-400">
               {stats.converted}
             </p>
           </div>
-          <div className="bg-[#11131A] border border-white/[0.08] rounded-xl p-4">
-            <p className="text-xs text-slate-400">Lead Conversion Rate</p>
+          <div className="p-4 sm:p-5">
+            <p className="text-xs text-zinc-400">Conversion Rate</p>
             <p className="mt-1 font-mono-tabular text-xl font-semibold text-blue-400">
               {stats.conversionRate}%
             </p>
@@ -362,27 +423,27 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
 
       {/* Follow-ups Due Today Banner */}
       {!loading && stats.followUpsDue.length > 0 && (
-        <div className="bg-[#11131A] border border-amber-500/25 rounded-xl p-4 space-y-3">
+        <div className="bg-[#111216] border border-amber-500/25 rounded-xl p-4 space-y-3">
           <div className="flex items-center gap-2 text-xs font-semibold text-amber-300">
             <CalendarClock className="w-4 h-4" />
             <span>Follow-ups Due Today or Overdue ({stats.followUpsDue.length})</span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
             {stats.followUpsDue.slice(0, 6).map((lead) => (
               <div
                 key={lead.id}
-                className="flex items-center justify-between gap-3 p-3 rounded-lg bg-[#09090B] border border-white/[0.06]"
+                className="flex items-center justify-between gap-3 p-3 rounded-lg bg-[#09090B] border border-white/[0.07]"
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{lead.businessName}</p>
-                  <p className="text-xs text-slate-400 mt-0.5 truncate">
+                  <p className="text-xs font-semibold text-white truncate">{lead.businessName}</p>
+                  <p className="text-[11px] text-zinc-400 mt-0.5 truncate">
                     {lead.contactChannel} · {lead.phone} · Due {formatDisplayDate(lead.followUpDate)}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => openEditModal(lead)}
-                  className="px-3 py-1.5 min-h-[36px] text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-white rounded-md whitespace-nowrap shrink-0"
+                  className="px-3 py-1.5 min-h-[34px] text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-white rounded-md whitespace-nowrap shrink-0"
                 >
                   Update
                 </button>
@@ -394,16 +455,16 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
 
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
+        <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               aria-label="Search leads"
               placeholder="Search business, contact, phone, city..."
-              className="w-full pl-9 pr-3 py-2 min-h-[40px] text-sm bg-[#11131A] border border-white/[0.08] rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+              className="w-full pl-9 pr-3 py-2 min-h-[38px] text-xs bg-[#111216] border border-white/[0.08] rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-blue-500"
             />
           </div>
 
@@ -411,7 +472,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             aria-label="Filter by lead pipeline status"
-            className="px-3 py-2 min-h-[40px] text-sm bg-[#11131A] border border-white/[0.08] rounded-lg text-slate-200 focus:outline-none focus:border-blue-500"
+            className={`${SELECT_CLASS} !min-h-[38px] !py-1.5 text-xs`}
           >
             <option value="ALL">All Pipeline Stages</option>
             <option value="DUE_TODAY">Follow-up Due Today/Past</option>
@@ -426,7 +487,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
             value={channelFilter}
             onChange={(e) => setChannelFilter(e.target.value)}
             aria-label="Filter by contact channel"
-            className="px-3 py-2 min-h-[40px] text-sm bg-[#11131A] border border-white/[0.08] rounded-lg text-slate-200 focus:outline-none focus:border-blue-500"
+            className={`${SELECT_CLASS} !min-h-[38px] !py-1.5 text-xs`}
           >
             <option value="ALL">All Channels</option>
             {LEAD_CHANNELS.map((ch) => (
@@ -436,18 +497,9 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
             ))}
           </select>
         </div>
-
-        <button
-          type="button"
-          onClick={openAddModal}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[40px] text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors whitespace-nowrap shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          Add Lead
-        </button>
       </div>
 
-      {/* Table / Mobile Cards */}
+      {/* Pipeline Board or Table */}
       {loading ? (
         <TableSkeleton rows={6} />
       ) : syncError && leads.length === 0 ? (
@@ -464,8 +516,129 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
           actionLabel={leads.length === 0 ? 'Add First Lead' : undefined}
           onAction={leads.length === 0 ? openAddModal : undefined}
         />
+      ) : viewMode === 'pipeline' ? (
+        /* CRM Stage Pipeline Board */
+        <div className="overflow-x-auto pb-3">
+          <div className="flex items-start gap-3.5 min-w-max">
+            {LEAD_STATUSES.map((stage) => {
+              const items = leadsByStage.get(stage) || [];
+              if (statusFilter !== 'ALL' && statusFilter !== 'DUE_TODAY' && statusFilter !== stage) {
+                return null;
+              }
+              return (
+                <div
+                  key={stage}
+                  className="w-[290px] bg-[#0D0E12] border border-white/[0.08] rounded-xl flex flex-col max-h-[70vh]"
+                >
+                  <div className="px-3.5 py-3 border-b border-white/[0.07] flex items-center justify-between gap-2 shrink-0">
+                    <StatusIndicator status={stage} />
+                    <span className="font-mono-tabular text-xs font-semibold text-zinc-400">
+                      {items.length}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 space-y-2.5 overflow-y-auto flex-1">
+                    {items.length === 0 ? (
+                      <p className="text-[11px] text-zinc-600 text-center py-6">
+                        No leads in {stage}
+                      </p>
+                    ) : (
+                      items.map((lead) => {
+                        const isDue =
+                          lead.status !== 'Converted' &&
+                          lead.status !== 'Lost' &&
+                          Boolean(lead.followUpDate) &&
+                          (lead.followUpDate as string) <= today;
+
+                        return (
+                          <div
+                            key={lead.id}
+                            className="p-3.5 rounded-lg bg-[#111216] border border-white/[0.08] hover:border-white/[0.16] transition-colors space-y-2.5"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-white truncate">
+                                  {lead.businessName}
+                                </p>
+                                <p className="text-[11px] text-zinc-400 truncate mt-0.5">
+                                  {lead.category} · {lead.location}
+                                </p>
+                              </div>
+                              <span className="font-mono text-[10px] text-zinc-500 shrink-0">
+                                {lead.leadCode}
+                              </span>
+                            </div>
+
+                            <div className="text-[11px] text-zinc-300 space-y-0.5">
+                              <p className="truncate">
+                                {lead.contactPerson} ·{' '}
+                                <span className="font-mono-tabular text-zinc-400">{lead.phone}</span>
+                              </p>
+                              <div className="flex items-center justify-between text-zinc-400">
+                                <span>{lead.contactChannel}</span>
+                                <span className="font-mono-tabular font-semibold text-zinc-200">
+                                  {formatKES(lead.estimatedBudget, currency)}
+                                </span>
+                              </div>
+                            </div>
+
+                            {lead.followUpDate && (
+                              <p
+                                className={`text-[11px] font-mono-tabular ${
+                                  isDue ? 'text-amber-400 font-semibold' : 'text-zinc-500'
+                                }`}
+                              >
+                                Follow-up: {formatDisplayDate(lead.followUpDate)}
+                              </p>
+                            )}
+
+                            <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-white/[0.06]">
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => openEditModal(lead)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-zinc-300 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] rounded"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                  Edit
+                                </button>
+                                {(lead.previewUrl || lead.socialLink) && (
+                                  <a
+                                    href={lead.previewUrl || lead.socialLink}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    title="Open demo or social link"
+                                    aria-label={`Open link for ${lead.businessName}`}
+                                    className="p-1 text-zinc-400 hover:text-blue-400 rounded"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                  </a>
+                                )}
+                              </div>
+
+                              {lead.status !== 'Converted' && (
+                                <button
+                                  type="button"
+                                  onClick={() => openConvertModal(lead)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-emerald-400 hover:bg-emerald-500/15 rounded"
+                                >
+                                  <UserCheck className="w-3 h-3" />
+                                  Convert
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       ) : (
-        <div className="bg-[#11131A] border border-white/[0.08] rounded-xl overflow-hidden">
+        <div className="bg-[#111216] border border-white/[0.08] rounded-xl overflow-hidden">
           {/* Mobile Cards */}
           <div className="md:hidden divide-y divide-white/[0.06]">
             {paginatedItems.map((lead) => {
@@ -479,7 +652,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-white truncate">{lead.businessName}</p>
-                      <p className="text-xs text-slate-400 truncate mt-0.5">
+                      <p className="text-xs text-zinc-400 truncate mt-0.5">
                         {lead.leadCode} · {lead.category} · {lead.location}
                       </p>
                     </div>
@@ -488,18 +661,18 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
 
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
-                      <p className="text-slate-500">Contact</p>
-                      <p className="text-slate-200 truncate">{lead.contactPerson}</p>
-                      <p className="font-mono-tabular text-slate-400">
+                      <p className="text-zinc-500">Contact</p>
+                      <p className="text-zinc-200 truncate">{lead.contactPerson}</p>
+                      <p className="font-mono-tabular text-zinc-400">
                         {lead.phone} · {lead.contactChannel}
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-slate-500">Follow-up & Budget</p>
-                      <p className={`font-mono-tabular ${isDue ? 'text-amber-400 font-semibold' : 'text-slate-200'}`}>
+                      <p className="text-zinc-500">Follow-up & Budget</p>
+                      <p className={`font-mono-tabular ${isDue ? 'text-amber-400 font-semibold' : 'text-zinc-200'}`}>
                         {formatDisplayDate(lead.followUpDate)}
                       </p>
-                      <p className="font-mono-tabular text-slate-400">
+                      <p className="font-mono-tabular text-zinc-400">
                         Est. {formatKES(lead.estimatedBudget, currency)} ({lead.interestLevel})
                       </p>
                     </div>
@@ -509,7 +682,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                     <button
                       type="button"
                       onClick={() => openEditModal(lead)}
-                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 min-h-[40px] text-xs font-medium text-slate-200 bg-white/[0.05] hover:bg-white/[0.09] border border-white/[0.08] rounded-lg transition-colors"
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 min-h-[40px] text-xs font-medium text-zinc-200 bg-white/[0.05] hover:bg-white/[0.09] border border-white/[0.08] rounded-lg transition-colors"
                     >
                       <Pencil className="w-3.5 h-3.5" />
                       Edit
@@ -541,17 +714,21 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
             })}
           </div>
 
-          {/* Desktop Table */}
+          {/* Desktop High-Density Table */}
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-white/[0.08] text-xs font-medium text-slate-400">
+                <tr className="border-b border-white/[0.07] bg-[#0D0E12]">
                   <SortableTh label="Business & City" sortKey="businessName" sort={sort} onSort={toggleSort} />
-                  <th className="py-3.5 px-4">Contact & Channel</th>
+                  <th className="py-3 px-4 text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                    Contact & Channel
+                  </th>
                   <SortableTh label="Interest / Budget" sortKey="estimatedBudget" sort={sort} onSort={toggleSort} />
                   <SortableTh label="Follow-up" sortKey="followUpDate" sort={sort} onSort={toggleSort} />
                   <SortableTh label="Stage" sortKey="status" sort={sort} onSort={toggleSort} />
-                  <th className="py-3.5 px-4 text-right">Actions</th>
+                  <th className="py-3 px-4 text-right text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.06] text-sm">
@@ -562,36 +739,36 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                     Boolean(lead.followUpDate) &&
                     (lead.followUpDate as string) <= today;
                   return (
-                    <tr key={lead.id} className="hover:bg-white/[0.02] transition-colors">
-                      <td className="py-3.5 px-4">
+                    <tr key={lead.id} className="hover:bg-white/[0.025] transition-colors">
+                      <td className="py-3 px-4">
                         <p className="font-medium text-white">{lead.businessName}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">
+                        <p className="text-xs text-zinc-400 mt-0.5">
                           {lead.leadCode} · {lead.category} · {lead.location}
                         </p>
                       </td>
-                      <td className="py-3.5 px-4">
-                        <p className="text-slate-200">{lead.contactPerson}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">
+                      <td className="py-3 px-4">
+                        <p className="text-zinc-200">{lead.contactPerson}</p>
+                        <p className="text-xs text-zinc-400 mt-0.5">
                           <span className="font-mono-tabular">{lead.phone}</span> · {lead.contactChannel}
                         </p>
                       </td>
-                      <td className="py-3.5 px-4">
-                        <p className="text-xs font-medium text-slate-200">
+                      <td className="py-3 px-4">
+                        <p className="text-xs font-medium text-zinc-200">
                           {lead.interestLevel} Interest
                         </p>
-                        <p className="font-mono-tabular text-xs text-slate-400 mt-0.5">
+                        <p className="font-mono-tabular text-xs text-zinc-400 mt-0.5">
                           Est. {formatKES(lead.estimatedBudget, currency)}
                         </p>
                       </td>
-                      <td className="py-3.5 px-4 font-mono-tabular text-xs whitespace-nowrap">
-                        <span className={isDue ? 'text-amber-400 font-semibold' : 'text-slate-300'}>
+                      <td className="py-3 px-4 font-mono-tabular text-xs whitespace-nowrap">
+                        <span className={isDue ? 'text-amber-400 font-semibold' : 'text-zinc-300'}>
                           {formatDisplayDate(lead.followUpDate)}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-4">
                         <StatusIndicator status={lead.status} />
                       </td>
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-3 px-4 text-right">
                         <div className="inline-flex items-center justify-end gap-1">
                           {(lead.previewUrl || lead.socialLink) && (
                             <a
@@ -600,7 +777,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                               rel="noreferrer"
                               title="Open Preview or Social Link"
                               aria-label={`Open preview or social link for ${lead.businessName}`}
-                              className="p-2 text-slate-400 hover:text-blue-400 hover:bg-white/[0.06] rounded-lg transition-colors"
+                              className="p-2 text-zinc-400 hover:text-blue-400 hover:bg-white/[0.06] rounded-md transition-colors"
                             >
                               <ExternalLink className="w-4 h-4" />
                             </a>
@@ -610,7 +787,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                             onClick={() => openEditModal(lead)}
                             title="Edit Lead"
                             aria-label={`Edit lead ${lead.businessName}`}
-                            className="p-2 text-slate-400 hover:text-white hover:bg-white/[0.06] rounded-lg transition-colors"
+                            className="p-2 text-zinc-400 hover:text-white hover:bg-white/[0.06] rounded-md transition-colors"
                           >
                             <Pencil className="w-4 h-4" />
                           </button>
@@ -619,7 +796,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                               type="button"
                               onClick={() => openConvertModal(lead)}
                               title="Convert Lead to Client"
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-emerald-400 hover:bg-emerald-500/10 rounded-md transition-colors"
                             >
                               <UserCheck className="w-3.5 h-3.5" />
                               Convert
@@ -660,7 +837,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
         <form onSubmit={(e) => void handleSaveLead(e)} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Business Name *
               </label>
               <input
@@ -669,12 +846,12 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                 maxLength={FIELD_LIMITS.businessNameMax}
                 value={formState.businessName}
                 onChange={(e) => setFormState({ ...formState, businessName: e.target.value })}
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Business Category *
               </label>
               <input
@@ -684,12 +861,12 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                 value={formState.category}
                 onChange={(e) => setFormState({ ...formState, category: e.target.value })}
                 placeholder="e.g. Salon, Hardware, Dental Clinic"
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Contact Person *
               </label>
               <input
@@ -698,12 +875,12 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                 maxLength={FIELD_LIMITS.contactNameMax}
                 value={formState.contactPerson}
                 onChange={(e) => setFormState({ ...formState, contactPerson: e.target.value })}
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Phone Number *
               </label>
               <input
@@ -713,12 +890,12 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                 value={formState.phone}
                 onChange={(e) => setFormState({ ...formState, phone: e.target.value })}
                 placeholder="+254 7XX XXX XXX"
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 City / Location *
               </label>
               <input
@@ -728,12 +905,12 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                 value={formState.location}
                 onChange={(e) => setFormState({ ...formState, location: e.target.value })}
                 placeholder="e.g. Nakuru, Mombasa, Nairobi"
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Contact Channel *
               </label>
               <select
@@ -741,7 +918,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                 onChange={(e) =>
                   setFormState({ ...formState, contactChannel: e.target.value as LeadChannel })
                 }
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               >
                 {LEAD_CHANNELS.map((ch) => (
                   <option key={ch} value={ch}>
@@ -752,7 +929,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Facebook or Instagram Link
               </label>
               <input
@@ -761,12 +938,12 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                 value={formState.socialLink || ''}
                 onChange={(e) => setFormState({ ...formState, socialLink: e.target.value })}
                 placeholder="https://facebook.com/..."
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Existing Website (if any)
               </label>
               <input
@@ -775,12 +952,12 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                 value={formState.existingWebsite || ''}
                 onChange={(e) => setFormState({ ...formState, existingWebsite: e.target.value })}
                 placeholder="https://..."
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 EMG Website Demo / Preview URL
               </label>
               <input
@@ -789,12 +966,12 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                 value={formState.previewUrl || ''}
                 onChange={(e) => setFormState({ ...formState, previewUrl: e.target.value })}
                 placeholder="https://demo-preview.vercel.app"
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Date Contacted *
               </label>
               <input
@@ -802,24 +979,24 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                 required
                 value={formState.dateContacted}
                 onChange={(e) => setFormState({ ...formState, dateContacted: e.target.value })}
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Follow-up Date
               </label>
               <input
                 type="date"
                 value={formState.followUpDate || ''}
                 onChange={(e) => setFormState({ ...formState, followUpDate: e.target.value })}
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Interest Level *
               </label>
               <select
@@ -827,7 +1004,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                 onChange={(e) =>
                   setFormState({ ...formState, interestLevel: e.target.value as LeadInterest })
                 }
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               >
                 {LEAD_INTERESTS.map((lvl) => (
                   <option key={lvl} value={lvl}>
@@ -838,7 +1015,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Estimated Budget ({currency}) *
               </label>
               <input
@@ -850,12 +1027,12 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                 onChange={(e) =>
                   setFormState({ ...formState, estimatedBudget: Number(e.target.value) || 0 })
                 }
-                className="w-full px-3.5 py-2 text-sm font-mono-tabular bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={`${INPUT_CLASS} font-mono-tabular`}
               />
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                 Pipeline Stage *
               </label>
               <select
@@ -863,7 +1040,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                 onChange={(e) =>
                   setFormState({ ...formState, status: e.target.value as LeadStatus })
                 }
-                className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                className={INPUT_CLASS}
               >
                 {LEAD_STATUSES.map((st) => (
                   <option key={st} value={st}>
@@ -875,14 +1052,14 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">Notes</label>
+            <label className="block text-xs font-medium text-zinc-300 mb-1.5">Notes</label>
             <textarea
               rows={3}
               maxLength={FIELD_LIMITS.notesMax}
               value={formState.notes || ''}
               onChange={(e) => setFormState({ ...formState, notes: e.target.value })}
               placeholder="Outreach conversation details, objections, or demo feedback..."
-              className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+              className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/[0.1] rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-blue-500"
             />
           </div>
 
@@ -890,7 +1067,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
             <button
               type="button"
               onClick={() => setFormOpen(false)}
-              className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-white/[0.05] rounded-lg"
+              className="px-4 py-2 text-sm font-medium text-zinc-300 hover:text-white bg-white/[0.05] rounded-lg"
             >
               Cancel
             </button>
@@ -914,7 +1091,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
       >
         {convertingLead && (
           <form onSubmit={(e) => void handleConvertSubmit(e)} className="space-y-4">
-            <div className="p-3.5 rounded-lg bg-[#09090B] border border-white/[0.08] text-xs text-slate-300 space-y-1">
+            <div className="p-3.5 rounded-lg bg-[#09090B] border border-white/[0.08] text-xs text-zinc-300 space-y-1">
               <p className="font-semibold text-white">{convertingLead.businessName}</p>
               <p>
                 {convertingLead.contactPerson} · {convertingLead.phone} · {convertingLead.location}
@@ -926,7 +1103,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                   Subscription Package *
                 </label>
                 <select
@@ -940,7 +1117,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                       monthlyAmount: pkg ? pkg.monthlyPrice : convertOpts.monthlyAmount,
                     });
                   }}
-                  className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  className={INPUT_CLASS}
                 >
                   {settings.packages.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -952,7 +1129,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                   Monthly Amount ({currency}) *
                 </label>
                 <input
@@ -966,24 +1143,24 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                       monthlyAmount: Number(e.target.value) || 0,
                     })
                   }
-                  className="w-full px-3.5 py-2 text-sm font-mono-tabular bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  className={`${INPUT_CLASS} font-mono-tabular`}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                   Client Email (Optional)
                 </label>
                 <input
                   type="email"
                   value={convertOpts.email || ''}
                   onChange={(e) => setConvertOpts({ ...convertOpts, email: e.target.value })}
-                  className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  className={INPUT_CLASS}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                   Domain Name (Optional)
                 </label>
                 <input
@@ -991,25 +1168,25 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                   value={convertOpts.domainName || ''}
                   onChange={(e) => setConvertOpts({ ...convertOpts, domainName: e.target.value })}
                   placeholder="client.co.ke"
-                  className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  className={INPUT_CLASS}
                 />
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                   Website URL (Optional)
                 </label>
                 <input
                   type="url"
                   value={convertOpts.websiteUrl || ''}
                   onChange={(e) => setConvertOpts({ ...convertOpts, websiteUrl: e.target.value })}
-                  className="w-full px-3.5 py-2 text-sm bg-[#09090B] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  className={INPUT_CLASS}
                 />
               </div>
             </div>
 
             <div className="space-y-2.5 pt-2">
-              <label className="flex items-center gap-2.5 text-sm text-slate-200 cursor-pointer">
+              <label className="flex items-center gap-2.5 text-sm text-zinc-200 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={convertOpts.createWebsite}
@@ -1023,7 +1200,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
 
               {convertOpts.createWebsite && (
                 <div className="pl-6">
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">
                     Hosting Provider
                   </label>
                   <input
@@ -1037,7 +1214,7 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                 </div>
               )}
 
-              <label className="flex items-center gap-2.5 text-sm text-slate-200 cursor-pointer">
+              <label className="flex items-center gap-2.5 text-sm text-zinc-200 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={convertOpts.createSubscription}
@@ -1046,15 +1223,36 @@ export function LeadsPage({ focusedRecordId, onClearFocusedRecord }: LeadsPagePr
                   }
                   className="rounded border-white/20 bg-[#09090B] text-blue-600"
                 />
-                <span>Also create initial monthly Subscription</span>
+                <span>Also activate Monthly Subscription</span>
               </label>
+
+              {convertOpts.createSubscription && (
+                <div className="pl-6">
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">
+                    Grace Period (Days)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={90}
+                    value={convertOpts.gracePeriodDays}
+                    onChange={(e) =>
+                      setConvertOpts({
+                        ...convertOpts,
+                        gracePeriodDays: Number(e.target.value) || 0,
+                      })
+                    }
+                    className="w-32 px-3 py-1.5 text-sm font-mono-tabular bg-[#09090B] border border-white/10 rounded-lg text-white"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/[0.08]">
               <button
                 type="button"
                 onClick={() => setConvertingLead(null)}
-                className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-white/[0.05] rounded-lg"
+                className="px-4 py-2 text-sm font-medium text-zinc-300 bg-white/[0.05] rounded-lg"
               >
                 Cancel
               </button>

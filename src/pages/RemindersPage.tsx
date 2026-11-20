@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Bell,
   BellRing,
@@ -19,6 +19,7 @@ import { useData } from '../context/DataContext';
 import { useToast } from '../components/ui/ToastContext';
 import { ErrorState, TableSkeleton } from '../components/ui/EmptyState';
 import { PaginationBar, useTablePagination } from '../components/ui/DataTableControls';
+import { PageHeader, SegmentedTabs } from '../components/ui/PageHeader';
 import {
   markAllNotificationsRead,
   markNotificationRead,
@@ -81,6 +82,7 @@ export function RemindersPage({ onNavigate }: RemindersPageProps) {
   const [activeFilter, setActiveFilter] = useState<NotificationFilter>('ALL');
   const [historyMode, setHistoryMode] = useState<'active' | 'history'>('active');
   const [search, setSearch] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
   const [enablingPush, setEnablingPush] = useState(false);
@@ -144,7 +146,22 @@ export function RemindersPage({ onNavigate }: RemindersPageProps) {
     totalItems,
     totalPages,
     paginatedItems,
-  } = useTablePagination(filteredNotifications, 10);
+  } = useTablePagination(filteredNotifications, 12);
+
+  useEffect(() => {
+    if (paginatedItems.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+    if (!selectedId || !paginatedItems.some((item) => item.id === selectedId)) {
+      setSelectedId(paginatedItems[0].id);
+    }
+  }, [paginatedItems, selectedId]);
+
+  const selectedItem = useMemo(
+    () => paginatedItems.find((i) => i.id === selectedId) || paginatedItems[0] || null,
+    [paginatedItems, selectedId]
+  );
 
   const handleRunCheck = async () => {
     setSyncing(true);
@@ -227,7 +244,7 @@ export function RemindersPage({ onNavigate }: RemindersPageProps) {
   const priorityIndicator = (priority: NotificationPriority) => {
     if (priority === 'Critical') {
       return (
-        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-400">
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-400">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
           Critical
         </span>
@@ -235,14 +252,14 @@ export function RemindersPage({ onNavigate }: RemindersPageProps) {
     }
     if (priority === 'Warning') {
       return (
-        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-400">
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-400">
           <Clock className="w-3.5 h-3.5 shrink-0" />
           Warning
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-400">
+      <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-400">
         <Info className="w-3.5 h-3.5 shrink-0" />
         Info
       </span>
@@ -270,279 +287,341 @@ export function RemindersPage({ onNavigate }: RemindersPageProps) {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Header Summary & Push Status Strip */}
-      <div className="bg-[#11131A] border border-white/[0.08] rounded-xl p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2.5">
-            <BellRing className="w-5 h-5 text-blue-400 shrink-0" />
-            <h2 className="text-base font-semibold text-white">
-              Smart Notification & Reminder Centre
-            </h2>
-          </div>
-          <p className="text-xs text-slate-400">
-            Evaluated in Africa/Nairobi (EAT) with automatic duplicate prevention.{' '}
-            {loading ? (
-              <span>Syncing live alert stream...</span>
+    <div className="space-y-5 animate-fade-in">
+      <PageHeader
+        title="Notification Inbox"
+        description={`Evaluated in Africa/Nairobi (EAT) with duplicate suppression · ${
+          loading
+            ? 'Syncing alerts...'
+            : `${unreadCount} unread${
+                metrics.criticalUnreadCount > 0 ? ` (${metrics.criticalUnreadCount} critical)` : ''
+              }`
+        }`}
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => void handleRunCheck()}
+              disabled={syncing || loading}
+              className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[38px] text-xs font-medium bg-[#111216] hover:bg-white/[0.06] text-white border border-white/[0.08] rounded-lg transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Checking...' : 'Run Check'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleMarkAllRead()}
+              disabled={markingAll || loading || unreadCount === 0}
+              className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[38px] text-xs font-medium bg-[#111216] hover:bg-white/[0.06] text-white border border-white/[0.08] rounded-lg transition-colors disabled:opacity-40"
+            >
+              <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+              Mark All Read
+            </button>
+
+            {permission === 'granted' && activeTokens.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => void handlePreviewSystemNotification()}
+                className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[38px] text-xs font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-lg transition-colors"
+              >
+                <Bell className="w-3.5 h-3.5" />
+                Test Push
+              </button>
             ) : (
-              <>
-                <span className="font-mono-tabular text-slate-200">{unreadCount}</span> unread alert
-                {unreadCount === 1 ? '' : 's'}
-                {metrics.criticalUnreadCount > 0
-                  ? ` (${metrics.criticalUnreadCount} critical)`
-                  : ''}
-                .
-              </>
+              <button
+                type="button"
+                onClick={() => void handleQuickEnablePush()}
+                disabled={enablingPush}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 min-h-[38px] text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
+              >
+                <BellRing className="w-3.5 h-3.5" />
+                {enablingPush
+                  ? 'Enabling...'
+                  : vapidConfigured
+                  ? 'Enable Web Push'
+                  : 'Setup Web Push'}
+              </button>
             )}
-          </p>
+
+            <button
+              type="button"
+              onClick={() => onNavigate('settings')}
+              aria-label="Notification preferences"
+              className="p-2 min-h-[38px] min-w-[38px] inline-flex items-center justify-center text-zinc-400 hover:text-white bg-[#111216] hover:bg-white/[0.06] border border-white/[0.08] rounded-lg transition-colors"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          </>
+        }
+      />
+
+      {/* Filter & Search Bar */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2.5 min-w-0">
+          <SegmentedTabs
+            value={activeFilter}
+            onChange={setActiveFilter}
+            options={filterTabs.map((t) => ({
+              id: t.id,
+              label: t.label,
+              count: loading ? undefined : t.count,
+            }))}
+          />
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => void handleRunCheck()}
-            disabled={syncing || loading}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 min-h-[38px] text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-white border border-white/[0.08] rounded-lg transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Checking...' : 'Run Check Now'}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => void handleMarkAllRead()}
-            disabled={markingAll || loading || unreadCount === 0}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 min-h-[38px] text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-white border border-white/[0.08] rounded-lg transition-colors disabled:opacity-40"
-          >
-            <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
-            Mark All Read
-          </button>
-
-          {permission === 'granted' && activeTokens.length > 0 ? (
-            <button
-              type="button"
-              onClick={() => void handlePreviewSystemNotification()}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 min-h-[38px] text-xs font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-lg transition-colors"
-            >
-              <Bell className="w-3.5 h-3.5" />
-              Test Browser Notification
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void handleQuickEnablePush()}
-              disabled={enablingPush}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 min-h-[38px] text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
-            >
-              <BellRing className="w-3.5 h-3.5" />
-              {enablingPush
-                ? 'Enabling Push...'
-                : vapidConfigured
-                ? 'Enable Web Push'
-                : 'Configure Web Push'}
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={() => onNavigate('settings')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[38px] text-xs font-medium text-slate-300 hover:text-white bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.08] rounded-lg transition-colors"
-          >
-            <Settings className="w-3.5 h-3.5" />
-            Preferences
-          </button>
-        </div>
-      </div>
-
-      {/* Filters, Search & View Mode */}
-      <div className="space-y-3">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {filterTabs.map((tab) => {
-              const active = activeFilter === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveFilter(tab.id)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 min-h-[36px] rounded-lg text-xs font-medium transition-colors border ${
-                    active
-                      ? 'bg-blue-600/20 text-blue-300 border-blue-500/35'
-                      : 'bg-[#11131A] text-slate-300 hover:text-white border-white/[0.08] hover:bg-white/[0.04]'
-                  }`}
-                >
-                  <span>{tab.label}</span>
-                  {!loading && (
-                    <span className="font-mono-tabular text-[11px] opacity-80">{tab.count}</span>
-                  )}
-                </button>
-              );
-            })}
+          <div className="relative flex-1 min-w-[200px] sm:w-64">
+            <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search notifications"
+              placeholder="Search client, phone, alert..."
+              className="w-full pl-9 pr-3 py-2 min-h-[38px] text-xs bg-[#111216] border border-white/[0.08] rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:border-blue-500"
+            />
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="inline-flex rounded-lg bg-[#11131A] border border-white/[0.08] p-0.5">
-              <button
-                type="button"
-                onClick={() => setHistoryMode('active')}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  historyMode === 'active'
-                    ? 'bg-white/[0.1] text-white'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                All Stream
-              </button>
-              <button
-                type="button"
-                onClick={() => setHistoryMode('history')}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  historyMode === 'history'
-                    ? 'bg-white/[0.1] text-white'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Read History
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="relative max-w-md">
-          <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label="Search notifications"
-            placeholder="Search client, phone, title, or alert details..."
-            className="w-full pl-9 pr-3 py-2 min-h-[40px] text-sm bg-[#11131A] border border-white/[0.08] rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+          <SegmentedTabs
+            value={historyMode}
+            onChange={setHistoryMode}
+            options={[
+              { id: 'active', label: 'Inbox' },
+              { id: 'history', label: 'Read History' },
+            ]}
           />
         </div>
       </div>
 
-      {/* Notification List */}
+      {/* Linear-style Master-Detail Inbox */}
       {loading ? (
-        <TableSkeleton rows={5} />
+        <TableSkeleton rows={6} />
       ) : syncError && notifications.length === 0 ? (
         <ErrorState message={syncError} onRetry={retrySync} />
       ) : filteredNotifications.length === 0 ? (
-        <div className="bg-[#11131A] border border-white/[0.08] rounded-xl p-10 text-center space-y-2">
-          <Bell className="w-8 h-8 text-slate-600 mx-auto" />
-          <p className="text-sm font-medium text-white">No notifications match this filter</p>
-          <p className="text-xs text-slate-400">
+        <div className="bg-[#111216] border border-white/[0.08] rounded-xl p-12 text-center space-y-2">
+          <Bell className="w-8 h-8 text-zinc-600 mx-auto" />
+          <p className="font-display text-sm font-semibold text-white">
+            {historyMode === 'history' ? 'No read alerts in history' : 'Inbox zero'}
+          </p>
+          <p className="text-xs text-zinc-400">
             {historyMode === 'history'
-              ? 'Notifications marked as read will appear here in your audit history.'
+              ? 'Notifications marked as read will appear here.'
               : 'Your business deadlines, subscriptions, invoices, and leads are clear for this view.'}
           </p>
         </div>
       ) : (
-        <div className="bg-[#11131A] border border-white/[0.08] rounded-xl overflow-hidden">
-          <div className="divide-y divide-white/[0.06]">
-            {paginatedItems.map((item) => (
-              <div
-                key={item.id}
-                className={`p-4 sm:p-5 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4 ${
-                  item.read ? 'bg-transparent opacity-75' : 'bg-white/[0.015]'
-                }`}
-              >
-                <div className="space-y-1.5 min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {priorityIndicator(item.priority)}
-                    <span className="text-[11px] text-slate-600">·</span>
-                    <span className="text-[11px] font-medium text-slate-400">
-                      {categoryLabel(item.category)}
-                    </span>
-                    <span className="text-[11px] text-slate-600">·</span>
-                    <span className="text-[11px] text-slate-400">
-                      {formatTimestampNairobi(item.createdAt)}
-                    </span>
-                    {!item.read && (
-                      <span className="text-[11px] font-semibold text-blue-400">Unread</span>
-                    )}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleOpenRecord(item)}
-                    className="text-left block group"
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
+          {/* Left Master List */}
+          <div className="xl:col-span-7 bg-[#111216] border border-white/[0.08] rounded-xl overflow-hidden">
+            <div className="divide-y divide-white/[0.06]">
+              {paginatedItems.map((item) => {
+                const isSelected = selectedItem?.id === item.id;
+                return (
+                  <div
+                    key={item.id}
+                    className={`p-4 transition-colors ${
+                      isSelected
+                        ? 'bg-blue-600/[0.08]'
+                        : item.read
+                        ? 'opacity-70 hover:bg-white/[0.025]'
+                        : 'hover:bg-white/[0.03]'
+                    }`}
                   >
-                    <h3 className="text-sm font-semibold text-white group-hover:text-blue-400 transition-colors">
-                      {item.title}
-                    </h3>
-                    <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">{item.message}</p>
-                  </button>
-
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-xs text-slate-400">
-                    {item.clientName && (
-                      <span className="inline-flex items-center gap-1">
-                        <User className="w-3.5 h-3.5 text-slate-500" />
-                        {item.clientName}
-                      </span>
-                    )}
-                    {typeof item.amount === 'number' && item.amount > 0 && (
-                      <span className="font-mono-tabular font-semibold text-slate-200">
-                        {formatKES(item.amount, currency)}
-                      </span>
-                    )}
-                    {item.dueDate && (
-                      <span className="inline-flex items-center gap-1">
-                        <CalendarClock className="w-3.5 h-3.5 text-slate-500" />
-                        Deadline: {formatDisplayDate(item.dueDate)}
-                      </span>
-                    )}
-                    {item.phone && (
-                      <span className="inline-flex items-center gap-1 font-mono-tabular">
-                        <Phone className="w-3.5 h-3.5 text-slate-500" />
-                        {item.phone}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 shrink-0">
-                  {!item.read && (
                     <button
                       type="button"
-                      onClick={() => void handleMarkOneRead(item.id)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 min-h-[36px] text-xs font-medium text-slate-300 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-lg transition-colors"
+                      onClick={() => setSelectedId(item.id)}
+                      className="w-full text-left space-y-1.5"
                     >
-                      <Check className="w-3.5 h-3.5" />
-                      Mark Read
-                    </button>
-                  )}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {!item.read && (
+                            <span
+                              className="w-2 h-2 rounded-full bg-blue-500 shrink-0"
+                              aria-label="Unread alert"
+                            />
+                          )}
+                          {priorityIndicator(item.priority)}
+                          <span className="text-[11px] text-zinc-600">·</span>
+                          <span className="text-[11px] text-zinc-400 truncate">
+                            {categoryLabel(item.category)}
+                          </span>
+                        </div>
+                        <span className="font-mono-tabular text-[11px] text-zinc-500 whitespace-nowrap shrink-0">
+                          {formatTimestampNairobi(item.createdAt)}
+                        </span>
+                      </div>
 
-                  {item.clientId && item.entityType === 'subscription' && (
-                    <button
-                      type="button"
-                      onClick={() => handleOpenRecord(item, 'clients', item.clientId)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 min-h-[36px] text-xs font-medium text-slate-300 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-lg transition-colors"
-                    >
-                      View Client
-                    </button>
-                  )}
+                      <h3 className="text-sm font-semibold text-white">{item.title}</h3>
+                      <p className="text-xs text-zinc-400 line-clamp-2 leading-relaxed">
+                        {item.message}
+                      </p>
 
-                  <button
-                    type="button"
-                    onClick={() => handleOpenRecord(item)}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 min-h-[36px] text-xs font-semibold text-blue-300 hover:text-white bg-blue-600/15 hover:bg-blue-600/30 border border-blue-500/30 rounded-lg transition-colors"
-                  >
-                    Open Record
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-[11px] text-zinc-400">
+                        {item.clientName && <span>{item.clientName}</span>}
+                        {typeof item.amount === 'number' && item.amount > 0 && (
+                          <span className="font-mono-tabular font-semibold text-zinc-200">
+                            {formatKES(item.amount, currency)}
+                          </span>
+                        )}
+                        {item.dueDate && (
+                          <span className="font-mono-tabular text-zinc-400">
+                            Due {formatDisplayDate(item.dueDate)}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+
+                    {/* Mobile / Compact Quick Actions */}
+                    <div className="xl:hidden flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-white/[0.06]">
+                      {!item.read && (
+                        <button
+                          type="button"
+                          onClick={() => void handleMarkOneRead(item.id)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-zinc-200 bg-white/[0.05] rounded-md"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          Mark Read
+                        </button>
+                      )}
+                      {item.clientId && item.entityType === 'subscription' && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenRecord(item, 'clients', item.clientId)}
+                          className="px-3 py-1.5 text-xs font-medium text-zinc-200 bg-white/[0.05] rounded-md"
+                        >
+                          View Client
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenRecord(item)}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-blue-300 bg-blue-600/20 rounded-md ml-auto"
+                      >
+                        Open Record
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <PaginationBar
+              page={page}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
 
-          <PaginationBar
-            page={page}
-            totalPages={totalPages}
-            totalItems={totalItems}
-            pageSize={pageSize}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-          />
+          {/* Right Focused Detail Inspector (Desktop) */}
+          {selectedItem && (
+            <div className="hidden xl:block xl:col-span-5 bg-[#111216] border border-white/[0.08] rounded-xl p-6 sticky top-20 space-y-5">
+              <div className="flex items-start justify-between gap-3 pb-4 border-b border-white/[0.07]">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    {priorityIndicator(selectedItem.priority)}
+                    <span className="text-xs text-zinc-600">·</span>
+                    <span className="text-xs text-zinc-400">
+                      {categoryLabel(selectedItem.category)}
+                    </span>
+                  </div>
+                  <h3 className="font-display text-lg font-semibold text-white">
+                    {selectedItem.title}
+                  </h3>
+                </div>
+                {!selectedItem.read && (
+                  <span className="text-[11px] font-semibold text-blue-400">Unread</span>
+                )}
+              </div>
+
+              <p className="text-sm text-zinc-300 leading-relaxed">{selectedItem.message}</p>
+
+              <div className="rounded-lg bg-[#0D0E12] border border-white/[0.07] divide-y divide-white/[0.06] text-xs">
+                {selectedItem.clientName && (
+                  <div className="px-4 py-2.5 flex items-center justify-between gap-3">
+                    <span className="text-zinc-500 inline-flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5" />
+                      Client / Account
+                    </span>
+                    <span className="font-medium text-white">{selectedItem.clientName}</span>
+                  </div>
+                )}
+                {typeof selectedItem.amount === 'number' && selectedItem.amount > 0 && (
+                  <div className="px-4 py-2.5 flex items-center justify-between gap-3">
+                    <span className="text-zinc-500">Amount Involved</span>
+                    <span className="font-mono-tabular font-semibold text-white">
+                      {formatKES(selectedItem.amount, currency)}
+                    </span>
+                  </div>
+                )}
+                {selectedItem.dueDate && (
+                  <div className="px-4 py-2.5 flex items-center justify-between gap-3">
+                    <span className="text-zinc-500 inline-flex items-center gap-1.5">
+                      <CalendarClock className="w-3.5 h-3.5" />
+                      Deadline
+                    </span>
+                    <span className="font-mono-tabular text-zinc-200">
+                      {formatDisplayDate(selectedItem.dueDate)}
+                    </span>
+                  </div>
+                )}
+                {selectedItem.phone && (
+                  <div className="px-4 py-2.5 flex items-center justify-between gap-3">
+                    <span className="text-zinc-500 inline-flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5" />
+                      Contact Phone
+                    </span>
+                    <span className="font-mono-tabular text-zinc-200">{selectedItem.phone}</span>
+                  </div>
+                )}
+                <div className="px-4 py-2.5 flex items-center justify-between gap-3">
+                  <span className="text-zinc-500">Generated (EAT)</span>
+                  <span className="font-mono-tabular text-zinc-300">
+                    {formatTimestampNairobi(selectedItem.createdAt)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenRecord(selectedItem)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 min-h-[38px] text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
+                >
+                  Open Linked Record
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+
+                {selectedItem.clientId && selectedItem.entityType === 'subscription' && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleOpenRecord(selectedItem, 'clients', selectedItem.clientId)
+                    }
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 min-h-[38px] text-xs font-medium text-zinc-200 bg-white/[0.05] hover:bg-white/[0.09] border border-white/[0.08] rounded-lg transition-colors"
+                  >
+                    View Client Profile
+                  </button>
+                )}
+
+                {!selectedItem.read && (
+                  <button
+                    type="button"
+                    onClick={() => void handleMarkOneRead(selectedItem.id)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 min-h-[38px] text-xs font-medium text-zinc-300 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-lg transition-colors"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    Mark Read
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
